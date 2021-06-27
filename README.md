@@ -7,9 +7,14 @@ The structure of Ao3 works don't map particularly well to documents in Plato, wh
 **Why is the binary so much larger than Plato?**  
 Network and HTML processing packages, mostly. If Ao3 ever releases an API, we'll be able to ditch the latter (as reqwests, the HTTP client package, has hooks for JSON processing), but until then we're stuck scraping full HTML pages and then extracting the necessary bits. But hey, it's still smaller than trying to save an entire tag off into epub and loading that, right?
 
-**Will you make a version for <other site>?**  
+**Will you make a version for [other site]?**  
 No, but you're welcome to fork this and do it yourself! The changes I've already made in the code should make it a lot easier to port for another site, as various views and handlers exist already.
 
+
+## Credits
+* Original core code (including all of the HTML engine, event system, and rendering system) - [Plato](https://github.com/baskerville/plato)
+* Additional icons - [Material Design Icons](https://materialdesignicons.com/)
+* A number of friends who encouraged me to turn the idea kicking around my head for months into an actual app, and provided feedback on very early iterations.
 
 ## Known Issues:
 * Notification position drifts (issue underlying in Plato)
@@ -32,6 +37,7 @@ No, but you're welcome to fork this and do it yourself! The changes I've already
 * Login (partially implemented, but getting the auth cycle right has proven tricky)
 * Option to set global default search parameters
 * Option to save works for offline reading
+* Show Ao3 symbols grid in various views
 
 ## Questions:
 * Does this render properly on devices other than the Glo?
