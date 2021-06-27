@@ -11,7 +11,7 @@ use crate::color::WHITE;
 use crate::app::Context;
 use crate::font::Fonts;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ResultsBar {
     id: Id,
     rect: Rectangle,

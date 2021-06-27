@@ -10,6 +10,7 @@ use lazy_static::lazy_static;
 use entities::ENTITIES;
 use walkdir::DirEntry;
 use anyhow::{Error, Context};
+use url::{Url, ParseError};
 
 lazy_static! {
     pub static ref CHARACTER_ENTITIES: FxHashMap<&'static str, &'static str> = {
@@ -19,6 +20,46 @@ lazy_static! {
         }
         m
     };
+}
+
+pub fn ceil(x: usize, y: usize) -> usize {
+    x / y  + (x%y != 0) as usize
+}
+
+pub fn get_url(url: &str) -> Url {
+    let ao3 = Url::parse("https://archiveofourown.org").unwrap();
+    let parsed = Url::parse(url);
+    match parsed {
+        Ok(unwrapped_url) => unwrapped_url,
+        Err(e) => if e == ParseError::RelativeUrlWithoutBase { ao3.join(url).unwrap()} else {ao3}
+    }
+
+}
+
+pub fn url_strip_page(url: &mut Url) {
+    let mut params = FxHashMap::default();
+    for (key, value) in url.query_pairs() {
+        if key == Cow::Borrowed("page") {
+            continue;
+        }
+        params.insert(key.into_owned(), value.into_owned());
+    }
+
+    url.query_pairs_mut().clear().extend_pairs(params.drain());
+}
+
+
+pub fn update_url(url: &mut Url, new_params: Vec<(&str, &str)>) {
+    let mut params = FxHashMap::default();
+    for (key, value) in url.query_pairs() {
+        params.insert(key.into_owned(), value.into_owned());
+    }
+
+    for (key, value) in new_params.iter() {
+        params.insert(key.to_string(), value.to_string());
+    }
+
+    url.query_pairs_mut().clear().extend_pairs(params.drain());
 }
 
 pub fn decode_entities(text: &str) -> Cow<str> {
@@ -153,6 +194,23 @@ pub mod datetime_format {
     pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Local>, D::Error> where D: Deserializer<'de> {
         let s = String::deserialize(deserializer)?;
         Local.datetime_from_str(&s, FORMAT).map_err(serde::de::Error::custom)
+    }
+}
+
+pub mod date_format {
+    use chrono::NaiveDate;
+    use serde::{self, Deserialize, Serializer, Deserializer};
+
+    pub const FORMAT: &str = "%Y-%m-%d";
+
+    pub fn serialize<S>(date: &NaiveDate, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        let s = format!("{}", date.format(FORMAT));
+        serializer.serialize_str(&s)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<NaiveDate, D::Error> where D: Deserializer<'de> {
+        let s = String::deserialize(deserializer)?;
+        NaiveDate::parse_from_str(&s, FORMAT).map_err(serde::de::Error::custom)
     }
 }
 

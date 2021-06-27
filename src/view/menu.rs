@@ -14,6 +14,7 @@ use super::{EntryKind, ViewId, Id, ID_FEEDER, CLOSE_IGNITION_DELAY};
 use super::{SMALL_BAR_HEIGHT, THICKNESS_MEDIUM, THICKNESS_LARGE, BORDER_RADIUS_MEDIUM};
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct Menu {
     id: Id,
     rect: Rectangle,

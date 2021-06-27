@@ -16,6 +16,7 @@ const BUMP_WIDTH: f32 = 4.0 * THICKNESS_LARGE;
 const BATTERY_HEIGHT: f32 = 11.0 * THICKNESS_LARGE;
 const BATTERY_WIDTH: f32 = 2.0 * BATTERY_HEIGHT;
 
+#[derive(Clone)]
 pub struct Battery {
     id: Id,
     rect: Rectangle,

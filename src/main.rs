@@ -10,6 +10,8 @@ mod input;
 mod gesture;
 mod helpers;
 mod dictionary;
+mod http;
+mod ao3_metadata;
 mod document;
 mod library;
 mod metadata;

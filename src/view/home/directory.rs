@@ -10,6 +10,7 @@ use crate::view::{THICKNESS_SMALL, BORDER_RADIUS_SMALL};
 use crate::unit::scale_by_dpi;
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct Directory {
     id: Id,
     rect: Rectangle,

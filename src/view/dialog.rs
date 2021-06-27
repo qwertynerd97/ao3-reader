@@ -15,6 +15,7 @@ use crate::app::Context;
 const LABEL_VALIDATE: &str = "OK";
 const LABEL_CANCEL: &str = "Cancel";
 
+#[derive(Clone)]
 pub struct Dialog {
     id: Id,
     rect: Rectangle,

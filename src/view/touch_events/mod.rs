@@ -11,6 +11,7 @@ use crate::unit::scale_by_dpi;
 use crate::color::{BLACK, WHITE, GRAY05, GRAY10};
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct TouchEvents {
     id: Id,
     rect: Rectangle,

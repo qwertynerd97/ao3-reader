@@ -23,6 +23,7 @@ lazy_static! {
     static ref EXCLUSIVE_ACCESS: Mutex<u8> = Mutex::new(0);
 }
 
+#[derive(Clone)]
 pub struct Shelf {
     id: Id,
     pub rect: Rectangle,

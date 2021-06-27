@@ -15,7 +15,10 @@ use chrono::Local;
 use regex::Regex;
 use septem::prelude::*;
 use septem::{Roman, Digit};
+use serde_json::{Value, Map};
+use serde::Deserialize;
 use rand_core::RngCore;
+use reqwest::StatusCode;
 use crate::input::{DeviceEvent, FingerStatus, ButtonCode, ButtonStatus};
 use crate::framebuffer::{Framebuffer, UpdateMode, Pixmap};
 use crate::view::{View, Event, AppCmd, Hub, Bus, RenderQueue, RenderData};
@@ -39,13 +42,18 @@ use crate::view::search_bar::SearchBar;
 use crate::view::keyboard::Keyboard;
 use crate::view::menu::{Menu, MenuKind};
 use crate::view::notification::Notification;
+use crate::view::overlay::Overlay;
+use crate::view::overlay::chapters::Chapters;
+use crate::view::overlay::works::WorksOverlay;
+use crate::view::works::work::{Work, WorkView};
 use crate::settings::{guess_frontlight, FinishedAction, SouthEastCornerAction};
 use crate::settings::{DEFAULT_FONT_FAMILY, DEFAULT_TEXT_ALIGN, DEFAULT_LINE_HEIGHT, DEFAULT_MARGIN_WIDTH};
 use crate::frontlight::LightLevels;
 use crate::gesture::GestureEvent;
-use crate::document::{Document, open, Location, TextLocation, BoundedText, Neighbors, BYTES_PER_PAGE};
+use crate::document::{Document, open, Location, TextLocation, BoundedText, Neighbors, BYTES_PER_PAGE, Chapter};
 use crate::document::{TocEntry, SimpleTocEntry, TocLocation, toc_as_html, annotations_as_html, bookmarks_as_html};
 use crate::document::html::HtmlDocument;
+use crate::document::ao3::Ao3Document;
 use crate::metadata::{Info, FileInfo, ReaderInfo, Annotation, TextAlign, ZoomMode, PageScheme};
 use crate::metadata::{Margin, CroppingMargins, make_query};
 use crate::metadata::{DEFAULT_CONTRAST_EXPONENT, DEFAULT_CONTRAST_GRAY};
@@ -60,6 +68,7 @@ const ANNOTATION_DRIFT: u8 =  0x44;
 const HIGHLIGHT_DRIFT: u8 =  0x22;
 const MEM_SCHEME: &str = "mem:";
 
+#[derive(Clone)]
 pub struct Reader {
     id: Id,
     rect: Rectangle,
@@ -87,14 +96,21 @@ pub struct Reader {
     reflowable: bool,
     ephemeral: bool,
     finished: bool,
+    has_chapters: bool
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ViewPort {
     zoom_mode: ZoomMode,
     page_offset: Point,   // Offset relative to the top left corner of a resource's frame.
     margin_width: i32,
 }
+
+#[derive(Deserialize)]
+struct KudosRes {
+    errors: Map<String, Value>
+}
+
 
 impl Default for ViewPort {
     fn default() -> Self {
@@ -113,29 +129,29 @@ enum State {
     AdjustSelection,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Selection {
     start: TextLocation,
     end: TextLocation,
     anchor: TextLocation,
 }
 
-#[derive(Debug)]
-struct Resource {
+#[derive(Debug, Clone)]
+pub struct Resource {
     pixmap: Pixmap,
     frame: Rectangle,  // The pixmap's rectangle minus the cropping margins.
     scale: f32,
 }
 
 #[derive(Debug, Clone)]
-struct RenderChunk {
+pub struct RenderChunk {
     location: usize,
     frame: Rectangle,  // A subrectangle of the corresponding resource's frame.
     position: Point,
     scale: f32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Search {
     query: String,
     highlights: BTreeMap<usize, Vec<Vec<Boundary>>>,
@@ -156,7 +172,7 @@ impl Default for Search {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Contrast {
     exponent: f32,
     gray: f32,
@@ -312,8 +328,7 @@ impl Reader {
 
             let synthetic = doc.has_synthetic_page_numbers();
             let reflowable = doc.is_reflowable();
-
-            println!("{}", info.file.path.display());
+            let has_chapters = doc.has_chapters();
 
             hub.send(Event::Update(UpdateMode::Partial)).ok();
 
@@ -344,6 +359,7 @@ impl Reader {
                 ephemeral: false,
                 reflowable,
                 finished: false,
+                has_chapters
             })
         })
     }
@@ -408,6 +424,72 @@ impl Reader {
             ephemeral: true,
             reflowable: true,
             finished: false,
+            has_chapters: false
+        }
+    }
+
+    pub fn from_ao3(rect: Rectangle, html: &str, link_uri: Option<&str>, hub: &Hub, context: &mut Context) -> Reader {
+        let id = ID_FEEDER.next();
+
+        let mut info = Info {
+            file: FileInfo {
+                path: PathBuf::from(MEM_SCHEME),
+                kind: "html".to_string(),
+                size: html.len() as u64,
+            },
+            .. Default::default()
+        };
+
+        let mut doc = Ao3Document::new_from_memory(html, link_uri);
+        let (width, height) = context.display.dims;
+        let font_size = context.settings.reader.font_size;
+        doc.layout(width, height, font_size, CURRENT_DEVICE.dpi);
+        let pages_count = doc.pages_count();
+        info.title = doc.title().unwrap_or_default();
+        let has_chapters = doc.has_chapters();
+
+        let mut current_page = 0;
+        if let Some(link_uri) = link_uri {
+            let mut loc = Location::Exact(0);
+            while let Some((links, offset)) = doc.links(loc) {
+                if links.iter().any(|link| link.text == link_uri) {
+                    current_page = offset;
+                    break;
+                }
+                loc = Location::Next(offset);
+            }
+        }
+
+        hub.send(Event::Update(UpdateMode::Partial)).ok();
+
+        Reader {
+            id,
+            rect,
+            children: vec![],
+            doc: Arc::new(Mutex::new(Box::new(doc))),
+            cache: BTreeMap::new(),
+            text: FxHashMap::default(),
+            annotations: FxHashMap::default(),
+            chunks: Vec::new(),
+            focus: None,
+            search: None,
+            search_direction: LinearDir::Forward,
+            held_buttons: FxHashSet::default(),
+            selection: None,
+            target_annotation: None,
+            history: VecDeque::new(),
+            state: State::Idle,
+            info,
+            current_page,
+            pages_count,
+            view_port: ViewPort::default(),
+            synthetic: true,
+            page_turns: 0,
+            contrast: Contrast::default(),
+            ephemeral: true,
+            reflowable: true,
+            finished: false,
+            has_chapters
         }
     }
 
@@ -860,32 +942,32 @@ impl Reader {
         if let Some(index) = locate::<ToolBar>(self) {
             let tool_bar = self.children[index].as_mut().downcast_mut::<ToolBar>().unwrap();
             let settings = &context.settings;
-            if self.reflowable {
-                let font_family = self.info.reader.as_ref()
-                                      .and_then(|r| r.font_family.clone())
-                                      .unwrap_or_else(|| settings.reader.font_family.clone());
-                tool_bar.update_font_family(font_family, rq);
-                let font_size = self.info.reader.as_ref()
-                                    .and_then(|r| r.font_size)
-                                    .unwrap_or(settings.reader.font_size);
-                tool_bar.update_font_size_slider(font_size, rq);
-                let text_align = self.info.reader.as_ref()
-                                    .and_then(|r| r.text_align)
-                                    .unwrap_or(settings.reader.text_align);
-                tool_bar.update_text_align_icon(text_align, rq);
-                let line_height = self.info.reader.as_ref()
-                                      .and_then(|r| r.line_height)
-                                      .unwrap_or(settings.reader.line_height);
-                tool_bar.update_line_height(line_height, rq);
-            } else {
-                tool_bar.update_contrast_exponent_slider(self.contrast.exponent, rq);
-                tool_bar.update_contrast_gray_slider(self.contrast.gray, rq);
-            }
-            let reflowable = self.reflowable;
-            let margin_width = self.info.reader.as_ref()
-                                   .and_then(|r| if reflowable { r.margin_width } else { r.screen_margin_width })
-                                   .unwrap_or_else(|| if reflowable { settings.reader.margin_width } else { 0 });
-            tool_bar.update_margin_width(margin_width, rq);
+            // if self.reflowable {
+            //     let font_family = self.info.reader.as_ref()
+            //                           .and_then(|r| r.font_family.clone())
+            //                           .unwrap_or_else(|| settings.reader.font_family.clone());
+            //     tool_bar.update_font_family(font_family, rq);
+            //     let font_size = self.info.reader.as_ref()
+            //                         .and_then(|r| r.font_size)
+            //                         .unwrap_or(settings.reader.font_size);
+            //     tool_bar.update_font_size_slider(font_size, rq);
+            //     let text_align = self.info.reader.as_ref()
+            //                         .and_then(|r| r.text_align)
+            //                         .unwrap_or(settings.reader.text_align);
+            //     tool_bar.update_text_align_icon(text_align, rq);
+            //     let line_height = self.info.reader.as_ref()
+            //                           .and_then(|r| r.line_height)
+            //                           .unwrap_or(settings.reader.line_height);
+            //     tool_bar.update_line_height(line_height, rq);
+            // } else {
+            //     tool_bar.update_contrast_exponent_slider(self.contrast.exponent, rq);
+            //     tool_bar.update_contrast_gray_slider(self.contrast.gray, rq);
+            // }
+            // let reflowable = self.reflowable;
+            // let margin_width = self.info.reader.as_ref()
+            //                        .and_then(|r| if reflowable { r.margin_width } else { r.screen_margin_width })
+            //                        .unwrap_or_else(|| if reflowable { settings.reader.margin_width } else { 0 });
+            // tool_bar.update_margin_width(margin_width, rq);
         }
     }
 
@@ -1232,8 +1314,8 @@ impl Reader {
             }
 
             let dpi = CURRENT_DEVICE.dpi;
-            let big_height = scale_by_dpi(BIG_BAR_HEIGHT, dpi) as i32;
-            let tb_height = 2 * big_height;
+            let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
+            let tb_height = 1 * small_height;
 
             let sp_rect = *self.child(2).rect() - pt!(0, tb_height as i32);
 
@@ -1243,7 +1325,8 @@ impl Reader {
                                               sp_rect.max.y + tb_height as i32],
                                         self.reflowable,
                                         self.info.reader.as_ref(),
-                                        &context.settings.reader);
+                                        &context.settings.reader,
+                                        self.has_chapters);
             self.children.insert(2, Box::new(tool_bar) as Box<dyn View>);
 
             let separator = Filler::new(sp_rect, BLACK);
@@ -1388,20 +1471,12 @@ impl Reader {
             let top_bar = TopBar::new(rect![self.rect.min.x,
                                             self.rect.min.y,
                                             self.rect.max.x,
-                                            self.rect.min.y + small_height - small_thickness],
+                                            self.rect.min.y + small_height + big_thickness],
                                       Event::Back,
                                       self.info.title(),
                                       context);
 
             self.children.insert(index, Box::new(top_bar) as Box<dyn View>);
-            index += 1;
-
-            let separator = Filler::new(rect![self.rect.min.x,
-                                              self.rect.min.y + small_height - small_thickness,
-                                              self.rect.max.x,
-                                              self.rect.min.y + small_height + big_thickness],
-                                        BLACK);
-            self.children.insert(index, Box::new(separator) as Box<dyn View>);
             index += 1;
 
             if let Some(ref s) = self.search {
@@ -1443,7 +1518,7 @@ impl Reader {
                     index += 1;
                 }
             } else {
-                let tb_height = 2 * big_height;
+                let tb_height = 1 * small_height;
                 let separator = Filler::new(rect![self.rect.min.x,
                                                   self.rect.max.y - (small_height + tb_height) as i32 - small_thickness,
                                                   self.rect.max.x,
@@ -1458,7 +1533,8 @@ impl Reader {
                                                   self.rect.max.y - small_height - small_thickness],
                                             self.reflowable,
                                             self.info.reader.as_ref(),
-                                            &context.settings.reader);
+                                            &context.settings.reader, 
+                                            self.has_chapters);
                 self.children.insert(index, Box::new(tool_bar) as Box<dyn View>);
                 index += 1;
             }
@@ -2558,6 +2634,68 @@ impl View for Reader {
                 }
                 true
             },
+            Event::ToggleAbout => {
+                let doc = self.doc.lock().unwrap();
+                let ao3_info = doc.ao3_meta();
+                
+                hub.send(Event::ToggleAboutWork(ao3_info)).ok();
+                true
+            },
+            // Event::ToggleToc => {
+            //     let doc = self.doc.lock().unwrap();
+            //     let overlay = Overlay::new(ViewId::Overlay, "Chapters".to_string(), doc.toc(), context);
+            //     rq.add(RenderData::new(overlay.id(), *overlay.rect(), UpdateMode::Gui));
+            //     self.children.push(Box::new(overlay) as Box<dyn View>);
+            //     true
+            // },
+            Event::Kudos => {
+                let doc = self.doc.lock().unwrap();
+                let params = [("utf8", "✓"), 
+                            ("authenticity_token", &doc.kudos_token()), 
+                            ("kudo[commentable_id]", &doc.work_id()),
+                            ("kudo[commentable_type]", "Work")];
+                let client = reqwest::blocking::Client::new();
+                let res = context.client.post("https://archiveofourown.org/kudos.js")
+                    .form(&params)
+                    .send();
+
+                match res {
+                    Ok(r) => {
+                        match r.status() {
+                            StatusCode::CREATED => {hub.send(Event::Notify("Thank you for leaving kudos!".to_string())).ok();},
+                            StatusCode::UNPROCESSABLE_ENTITY => {
+                                let data = r.json::<KudosRes>();
+                                match data {
+                                    Ok(json) => {
+                                        for val in json.errors.values() {
+                                            match val {
+                                                Value::Array(items) => {
+                                                    for item in items {
+                                                    hub.send(Event::Notify(item.to_string())).ok();
+                                                    }
+                                                },
+                                                _ => {hub.send(Event::Notify(val.to_string())).ok();}
+                                            }
+                                            
+                                        }
+                                    },
+                                    Err(e) => {
+                                        println!("{}", e);
+                                        hub.send(Event::Notify("Sorry, we were unable to save your kudos".to_string())).ok();
+                                    }
+                                }
+                                
+                            },
+                            _ => {hub.send(Event::Notify("Sorry, we were unable to save your kudos".to_string())).ok();} 
+                        };
+                    },
+                    Err(e) => {
+                        println!("{}", e);
+                        hub.send(Event::Notify("Sorry, we were unable to save your kudos".to_string())).ok();
+                    }
+                };
+                true
+            },
             Event::Gesture(GestureEvent::Spread { axis: Axis::Horizontal, center, .. }) if self.rect.includes(center) => {
                 if !self.reflowable {
                     self.set_zoom_mode(ZoomMode::FitToWidth, true, hub, rq, context);
@@ -2934,6 +3072,25 @@ impl View for Reader {
                         if let Ok(index) = caps[1].parse::<usize>() {
                             self.go_to_page(index.saturating_sub(1), true, hub, rq, context);
                         }
+                    } else if link.text.starts_with("http://") | link.text.starts_with("https://") {
+                        let uri = String::from(&link.text);
+                        if !context.settings.wifi {
+                            hub.send(Event::SetWifi(true)).ok();
+                        }
+                        let html = context.client.get(&uri).send();
+                        match html {
+                        Ok(r) => {
+                            let text = r.text();
+                            match text {
+                                Ok(t) => hub.send(Event::OpenHtml(t, Some(uri))).ok(),
+                                Err(e) => hub.send(Event::Notify(format!("There was an error in the response body of {}:\n{}", uri, e))).ok(),
+                            };
+                        },
+                        Err(e) => {
+                            hub.send(Event::Notify(format!("{}", e))).ok();
+                        }
+                    }
+
                     } else {
                         let mut doc = self.doc.lock().unwrap();
                         let loc = Location::LocalUri(self.current_page, link.text.clone());
@@ -3206,6 +3363,7 @@ impl View for Reader {
                 true
             },
             Event::GoToLocation(ref location) => {
+                println!("trying to go to location {:?}", location);
                 let offset_opt = {
                     let mut doc = self.doc.lock().unwrap();
                     doc.resolve_location(location.clone())
@@ -3351,6 +3509,14 @@ impl View for Reader {
             Event::Close(ViewId::NamePage) => {
                 self.toggle_keyboard(false, None, hub, rq, context);
                 false
+            },
+            Event::Show(ViewId::ChapterList) => {
+                let doc = self.doc.lock().unwrap();
+                let mut chapter_overlay = Chapters::new(doc.chapterlist(), context);
+                chapter_overlay.update_chapters();
+                rq.add(RenderData::new(chapter_overlay.id(), *chapter_overlay.rect(), UpdateMode::Gui));
+                self.children.push(Box::new(chapter_overlay) as Box<dyn View>);
+                true
             },
             Event::Show(ViewId::TableOfContents) => {
                 {
@@ -3871,7 +4037,7 @@ impl View for Reader {
 
                 while index > 2 {
                     let bar_height = if self.children[index].is::<ToolBar>() {
-                        2 * big_height
+                        1 * big_height
                     } else if self.children[index].is::<Keyboard>() {
                         3 * big_height
                     } else {

@@ -3,7 +3,10 @@ use std::sync::mpsc;
 use chrono::Local;
 use crate::device::CURRENT_DEVICE;
 use crate::settings::{ButtonScheme, RotationLock};
+use crate::settings::{DEFAULT_FONT_FAMILY};
+use crate::metadata::{ReaderInfo, TextAlign};
 use crate::framebuffer::UpdateMode;
+use crate::font::family_names;
 use crate::geom::{Point, Rectangle};
 use super::{View, RenderQueue, RenderData, ViewId, AppCmd, EntryId, EntryKind};
 use super::menu::{Menu, MenuKind};
@@ -73,6 +76,11 @@ pub fn toggle_main_menu(view: &mut dyn View, rect: Rectangle, enable: Option<boo
             return;
         }
 
+        let reader_info = Some(ReaderInfo {
+            .. Default::default()
+        });
+
+        // Rotation options
         let rotation = CURRENT_DEVICE.to_canonical(context.display.rotation);
         let rotate = (0..4).map(|n|
             EntryKind::RadioButton((n as i16 * 90).to_string(),
@@ -80,22 +88,74 @@ pub fn toggle_main_menu(view: &mut dyn View, rect: Rectangle, enable: Option<boo
                                    n == rotation)
         ).collect::<Vec<EntryKind>>();
 
-        let apps = vec![EntryKind::Command("Dictionary".to_string(),
-                                           EntryId::Launch(AppCmd::Dictionary { query: "".to_string(), language: "".to_string() })),
-                        EntryKind::Command("Calculator".to_string(),
-                                           EntryId::Launch(AppCmd::Calculator)),
-                        EntryKind::Command("Sketch".to_string(),
-                                           EntryId::Launch(AppCmd::Sketch)),
-                        EntryKind::Separator,
-                        EntryKind::Command("Touch Events".to_string(),
-                                           EntryId::Launch(AppCmd::TouchEvents)),
-                        EntryKind::Command("Rotation Values".to_string(),
-                                           EntryId::Launch(AppCmd::RotationValues))];
+        // Font size options
+        let font_size = reader_info.as_ref().and_then(|r| r.font_size)
+        .unwrap_or(context.settings.reader.font_size);
+        let min_font_size = context.settings.reader.font_size / 2.0;
+        let max_font_size = 3.0 * context.settings.reader.font_size / 2.0;
+        let font_size_entries = (0..=20).filter_map(|v| {
+        let fs = font_size - 1.0 + v as f32 / 10.0;
+        if fs >= min_font_size && fs <= max_font_size {
+            Some(EntryKind::RadioButton(format!("{:.1}", fs),
+                                    EntryId::SetFontSize(v),
+                                    (fs - font_size).abs() < 0.05))
+            } else {
+            None
+            }
+            }).collect();
+        
+        // Text align options
+        let text_align = reader_info.as_ref().and_then(|r| r.text_align)
+        .unwrap_or(context.settings.reader.text_align);
+        let choices = [TextAlign::Justify, TextAlign::Left, TextAlign::Right, TextAlign::Center];
+        let text_align_entries = choices.iter().map(|v| {
+        EntryKind::RadioButton(v.to_string(),
+                    EntryId::SetTextAlign(*v),
+                    text_align == *v)
+        }).collect();
+
+        // Line Height options 
+        let line_height = reader_info.as_ref()
+                                .and_then(|r| r.line_height).unwrap_or(context.settings.reader.line_height);
+        let line_height_entries = (0..=10).map(|x| {
+            let lh = 1.0 + x as f32 / 10.0;
+            EntryKind::RadioButton(format!("{:.1}", lh),
+                                    EntryId::SetLineHeight(x),
+                                    (lh - line_height).abs() < 0.05)
+        }).collect();
+
+        // Margin width options
+        let margin_width = reader_info.as_ref()
+                                .and_then(|r| r.margin_width)
+                                .unwrap_or_else(|| context.settings.reader.margin_width);
+        let margin_width_entries = (0..=10).map(|mw| EntryKind::RadioButton(format!("{}", mw),
+                                                                EntryId::SetMarginWidth(mw),
+                                                                mw == margin_width)).collect();
+
+        // Font family options
+        let mut families = family_names(&context.settings.reader.font_path)
+        .map_err(|e| eprintln!("Can't get family names: {}", e))
+        .unwrap_or_default();
+        let current_family = reader_info.as_ref()
+        .and_then(|r| r.font_family.clone())
+        .unwrap_or_else(|| context.settings.reader.font_family.clone());
+        families.insert(DEFAULT_FONT_FAMILY.to_string());
+        let font_family_entries = families.iter().map(|f| EntryKind::RadioButton(f.clone(),
+                                            EntryId::SetFontFamily(f.clone()),
+                                            *f == current_family)).collect();
+
+        let reader_set = vec![EntryKind::SubMenu("Font Size".to_string(), font_size_entries),
+                            EntryKind::SubMenu("Text Align".to_string(), text_align_entries),
+                            EntryKind::SubMenu("Line Height".to_string(), line_height_entries),
+                            EntryKind::SubMenu("Margin Width".to_string(), margin_width_entries),
+                            EntryKind::SubMenu("Font Family".to_string(), font_family_entries)];
+
         let mut entries = vec![EntryKind::Command("About".to_string(),
                                                   EntryId::About),
                                EntryKind::Command("System Info".to_string(),
                                                   EntryId::SystemInfo),
                                EntryKind::Separator,
+                               EntryKind::SubMenu("Display Settings".to_string(), reader_set),
                                EntryKind::CheckBox("Invert Colors".to_string(),
                                                    EntryId::ToggleInverted,
                                                    context.fb.inverted()),
@@ -106,8 +166,6 @@ pub fn toggle_main_menu(view: &mut dyn View, rect: Rectangle, enable: Option<boo
                                EntryKind::SubMenu("Rotate".to_string(), rotate),
                                EntryKind::Command("Take Screenshot".to_string(),
                                                   EntryId::TakeScreenshot),
-                               EntryKind::Separator,
-                               EntryKind::SubMenu("Applications".to_string(), apps),
                                EntryKind::Separator];
 
         if env::var_os("PLATO_STANDALONE").is_some() {

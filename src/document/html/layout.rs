@@ -262,6 +262,7 @@ pub enum FontWeight {
     Bold,
 }
 
+#[derive(Clone)]
 pub struct Fonts {
     pub serif: FontFamily,
     pub sans_serif: FontFamily,

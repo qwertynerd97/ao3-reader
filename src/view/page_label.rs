@@ -8,6 +8,7 @@ use crate::framebuffer::{Framebuffer, UpdateMode};
 use super::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, ViewId};
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct PageLabel {
     id: Id,
     rect: Rectangle,

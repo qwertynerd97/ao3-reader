@@ -23,8 +23,6 @@ use crate::view::frontlight::FrontlightWindow;
 use crate::view::menu::{Menu, MenuKind};
 use crate::view::keyboard::{Layout};
 use crate::view::dictionary::Dictionary as DictionaryApp;
-use crate::view::calculator::Calculator;
-use crate::view::sketch::Sketch;
 use crate::view::touch_events::TouchEvents;
 use crate::view::rotation_values::RotationValues;
 use crate::document::sys_info_as_html;
@@ -38,12 +36,17 @@ use crate::lightsensor::{LightSensor, KoboLightSensor};
 use crate::battery::{Battery, KoboBattery};
 use crate::geom::{Rectangle, DiagDir, Region};
 use crate::view::home::Home;
+use crate::view::works::Works;
 use crate::view::reader::Reader;
+use crate::view::works::workindex::WorkIndex;
 use crate::view::dialog::Dialog;
+use crate::view::overlay::Overlay;
+use crate::view::overlay::about::About;
 use crate::view::intermission::{Intermission, IntermKind};
 use crate::view::notification::Notification;
 use crate::device::{CURRENT_DEVICE, Orientation, FrontlightKind};
 use crate::library::Library;
+use crate::http::{HttpClient, update_session};
 use crate::font::Fonts;
 use crate::rtc::Rtc;
 
@@ -83,21 +86,23 @@ pub struct Context {
     pub covered: bool,
     pub shared: bool,
     pub online: bool,
+    pub client: HttpClient,
 }
 
 impl Context {
     pub fn new(fb: Box<dyn Framebuffer>, rtc: Option<Rtc>, library: Library,
-               settings: Settings, fonts: Fonts, battery: Box<dyn Battery>,
+               mut settings: Settings, fonts: Fonts, battery: Box<dyn Battery>,
                frontlight: Box<dyn Frontlight>, lightsensor: Box<dyn LightSensor>) -> Context {
         let dims = fb.dims();
         let rotation = CURRENT_DEVICE.transformed_rotation(fb.rotation());
         let rng = Xoroshiro128Plus::seed_from_u64(Local::now().timestamp_nanos() as u64);
+        let client = HttpClient::new(&mut settings);
         Context { fb, rtc, display: Display { dims, rotation },
                   library, settings, fonts, dictionaries: BTreeMap::new(),
                   keyboard_layouts: BTreeMap::new(), input_history: FxHashMap::default(),
                   battery, frontlight, lightsensor, notification_index: 0,
                   kb_rect: Rectangle::default(), rng, plugged: false, covered: false,
-                  shared: false, online: false }
+                  shared: false, online: false, client }
     }
 
     pub fn batch_import(&mut self) {
@@ -352,6 +357,11 @@ pub fn run() -> Result<(), Error> {
     }
 
     let mut context = build_context(Box::new(fb)).context("Can't build context.")?;
+    set_wifi(true, &mut context);
+    context.client.test_login();
+    // if !context.client.test_login() {
+    //     context.client.login("momijizukamori", "magus256");
+    // }
     if context.settings.import.startup_trigger {
         context.batch_import();
     }
@@ -423,7 +433,7 @@ pub fn run() -> Result<(), Error> {
     let mut tasks: Vec<Task> = Vec::new();
     let mut history: Vec<HistoryItem> = Vec::new();
     let mut rq = RenderQueue::new();
-    let mut view: Box<dyn View> = Box::new(Home::new(context.fb.rect(), &tx,
+    let mut view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), &tx,
                                                      &mut rq, &mut context)?);
 
     let mut updating = FxHashMap::default();
@@ -462,7 +472,15 @@ pub fn run() -> Result<(), Error> {
                         }
                     },
                     DeviceEvent::Button { code: ButtonCode::Light, status: ButtonStatus::Pressed, .. } => {
-                        tx.send(Event::ToggleFrontlight).ok();
+                        let name = Local::now().format("screenshot-%Y%m%d_%H%M%S.png");
+                        let msg = match context.fb.save(&name.to_string()) {
+                            Err(e) => format!("{}", e),
+                            Ok(_) => format!("Saved {}.", name),
+                        };
+                        let notif = Notification::new(ViewId::TakeScreenshotNotif,
+                                                      msg, &tx, &mut rq, &mut context);
+                        view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                        //tx.send(Event::ToggleFrontlight).ok();
                     },
                     DeviceEvent::CoverOn => {
                         context.covered = true;
@@ -517,9 +535,9 @@ pub fn run() -> Result<(), Error> {
                                                       &tx, &mut rq, &mut context);
                         context.online = true;
                         view.children_mut().push(Box::new(notif) as Box<dyn View>);
-                        if view.is::<Home>() {
+                        if view.is::<Works>() {
                             view.handle_event(&evt, &tx, &mut bus, &mut rq, &mut context);
-                        } else if let Some(entry) = history.get_mut(0).filter(|entry| entry.view.is::<Home>()) {
+                        } else if let Some(entry) = history.get_mut(0).filter(|entry| entry.view.is::<Works>()) {
                             let (tx, _rx) = mpsc::channel();
                             entry.view.handle_event(&evt, &tx, &mut VecDeque::new(), &mut RenderQueue::new(), &mut context);
                         }
@@ -675,6 +693,7 @@ pub fn run() -> Result<(), Error> {
                 tasks.retain(|task| task.id != TaskId::PrepareSuspend);
                 updating.retain(|tok, _| context.fb.wait(*tok).is_err());
                 let path = Path::new(SETTINGS_PATH);
+                update_session(&mut context);
                 save_toml(&context.settings, path).map_err(|e| eprintln!("Can't save settings: {}", e)).ok();
                 context.library.flush();
 
@@ -749,6 +768,7 @@ pub fn run() -> Result<(), Error> {
                     view = item.view;
                 }
                 let path = Path::new(SETTINGS_PATH);
+                update_session(&mut context);
                 save_toml(&context.settings, path).map_err(|e| eprintln!("Can't save settings: {}", e)).ok();
                 context.library.flush();
 
@@ -854,11 +874,28 @@ pub fn run() -> Result<(), Error> {
                     handle_event(view.as_mut(), &Event::Invalid(path), &tx, &mut bus, &mut rq, &mut context);
                 }
             },
+            Event::OpenWork(id) => {
+                let uri = format!("https://archiveofourown.org/works/{}?view_full_work=true&view_adult=true", id);
+                let html = context.client.get_html(&uri);
+                let rotation = context.display.rotation;
+                let dithered = context.fb.dithered();
+                let r = Reader::from_ao3(context.fb.rect(), &html, Some(&uri), &tx, &mut context);
+                let mut next_view = Box::new(r) as Box<dyn View>;
+                transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
+                history.push(HistoryItem {
+                    view,
+                    rotation,
+                    monochrome: context.fb.monochrome(),
+                    dithered,
+                });
+                view = next_view;
+
+            },
             Event::Select(EntryId::About) => {
                 let dialog = Dialog::new(ViewId::AboutDialog,
-                                         None,
-                                         format!("Plato {}", env!("CARGO_PKG_VERSION")),
-                                         &mut context);
+                    None,
+                    format!("Plato {}", env!("CARGO_PKG_VERSION")),
+                    &mut context);
                 rq.add(RenderData::new(dialog.id(), *dialog.rect(), UpdateMode::Gui));
                 view.children_mut().push(Box::new(dialog) as Box<dyn View>);
             },
@@ -878,7 +915,21 @@ pub fn run() -> Result<(), Error> {
             },
             Event::OpenHtml(ref html, ref link_uri) => {
                 view.children_mut().retain(|child| !child.is::<Menu>());
-                let r = Reader::from_html(context.fb.rect(), html, link_uri.as_deref(), &tx, &mut context);
+                let r = Reader::from_ao3(context.fb.rect(), html, link_uri.as_deref(), &tx, &mut context);
+                let mut next_view = Box::new(r) as Box<dyn View>;
+                transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
+                history.push(HistoryItem {
+                    view,
+                    rotation: context.display.rotation,
+                    monochrome: context.fb.monochrome(),
+                    dithered: context.fb.dithered(),
+                });
+                view = next_view;
+            },
+            Event::LoadIndex( link_uri) => {
+                view.children_mut().retain(|child| !child.is::<Menu>());
+                let mut r = WorkIndex::new(context.fb.rect(), false, link_uri, &tx, &mut context);
+                r.get_works(&context, &mut rq);
                 let mut next_view = Box::new(r) as Box<dyn View>;
                 transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
                 history.push(HistoryItem {
@@ -893,11 +944,6 @@ pub fn run() -> Result<(), Error> {
                 view.children_mut().retain(|child| !child.is::<Menu>());
                 let monochrome = context.fb.monochrome();
                 let mut next_view: Box<dyn View> = match app_cmd {
-                    AppCmd::Sketch => {
-                        context.fb.set_monochrome(true);
-                        Box::new(Sketch::new(context.fb.rect(), &mut rq, &mut context))
-                    },
-                    AppCmd::Calculator => Box::new(Calculator::new(context.fb.rect(), &tx, &mut rq, &mut context)?),
                     AppCmd::Dictionary { ref query, ref language } => Box::new(DictionaryApp::new(context.fb.rect(), query,
                                                                                                   language, &tx, &mut rq, &mut context)),
                     AppCmd::TouchEvents => {
@@ -934,7 +980,7 @@ pub fn run() -> Result<(), Error> {
                         }
                     }
                     view.handle_event(&Event::Reseed, &tx, &mut bus, &mut rq, &mut context);
-                } else if !view.is::<Home>() {
+                } else if !view.is::<Works>() {
                     break;
                 }
             },
@@ -967,6 +1013,12 @@ pub fn run() -> Result<(), Error> {
             Event::ToggleNear(ViewId::KeyboardLayoutMenu, rect) => {
                 toggle_keyboard_layout_menu(view.as_mut(), rect, None, &mut rq, &mut context);
             },
+            Event::ToggleAboutWork(info) => {
+                println!("Trying to open about work overlay");
+                let about_overlay = About::new(info, &mut context);
+                rq.add(RenderData::new(about_overlay.id(), *about_overlay.rect(), UpdateMode::Gui));
+                view.children_mut().push(Box::new(about_overlay) as Box<dyn View>);
+             }
             Event::Close(ViewId::Frontlight) => {
                 if let Some(index) = locate::<FrontlightWindow>(view.as_ref()) {
                     let rect = *view.child(index).rect();
@@ -1049,8 +1101,8 @@ pub fn run() -> Result<(), Error> {
             Event::FetcherAddDocument(..) |
             Event::FetcherSearch { .. } |
             Event::FetcherCleanUp(..) |
-            Event::FetcherImport(..) if !view.is::<Home>() => {
-                if let Some(entry) = history.get_mut(0).filter(|entry| entry.view.is::<Home>()) {
+            Event::FetcherImport(..) if !view.is::<Works>() => {
+                if let Some(entry) = history.get_mut(0).filter(|entry| entry.view.is::<Works>()) {
                     let (tx, _rx) = mpsc::channel();
                     entry.view.handle_event(&evt, &tx, &mut VecDeque::new(), &mut RenderQueue::new(), &mut context);
                 }
@@ -1060,6 +1112,10 @@ pub fn run() -> Result<(), Error> {
                                               msg, &tx, &mut rq, &mut context);
                 view.children_mut().push(Box::new(notif) as Box<dyn View>);
             },
+            // Event::ShowOverlay(data) => {
+            //     let notif = Overlay::new(ViewId::Overlay, "".to_string(), data, &mut context);
+            //     view.children_mut().push(Box::new(notif) as Box<dyn View>);
+            // },
             Event::Select(EntryId::Reboot) => {
                 exit_status = ExitStatus::Reboot;
                 break;
@@ -1089,6 +1145,9 @@ pub fn run() -> Result<(), Error> {
                     view.children_mut().push(Box::new(interm) as Box<dyn View>);
                 }
             },
+            Event::ToggleFave(title, url)  => {
+                context.settings.ao3.toggle_fave(title, url);
+            },
             _ => {
                 handle_event(view.as_mut(), &evt, &tx, &mut bus, &mut rq, &mut context);
             },
@@ -1114,6 +1173,7 @@ pub fn run() -> Result<(), Error> {
     context.library.flush();
 
     let path = Path::new(SETTINGS_PATH);
+    update_session(&mut context);
     save_toml(&context.settings, path).context("Can't save settings.")?;
 
     match exit_status {

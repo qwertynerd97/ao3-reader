@@ -373,12 +373,6 @@ fn main() -> Result<(), Error> {
                 Event::Select(EntryId::Launch(app_cmd)) => {
                     view.children_mut().retain(|child| !child.is::<Menu>());
                     let mut next_view: Box<dyn View> = match app_cmd {
-                        AppCmd::Sketch => {
-                            Box::new(Sketch::new(context.fb.rect(), &mut rq, &mut context))
-                        },
-                        AppCmd::Calculator => {
-                            Box::new(Calculator::new(context.fb.rect(), &tx, &mut rq, &mut context)?)
-                        },
                         AppCmd::Dictionary { ref query, ref language } => {
                             Box::new(Dictionary::new(context.fb.rect(), query, language, &tx, &mut rq, &mut context))
                         },

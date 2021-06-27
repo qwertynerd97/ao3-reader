@@ -9,6 +9,7 @@ use crate::color::{TEXT_NORMAL, BLACK};
 use crate::app::Context;
 use crate::unit::scale_by_dpi;
 
+#[derive(Clone)]
 pub struct InputField {
     id: Id,
     pub rect: Rectangle,

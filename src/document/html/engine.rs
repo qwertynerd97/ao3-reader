@@ -39,6 +39,7 @@ pub trait ResourceFetcher {
 }
 
 // TODO: Add min_font_size.
+#[derive(Clone)]
 pub struct Engine {
     fonts: Option<Fonts>,
     // Page margins in pixels.

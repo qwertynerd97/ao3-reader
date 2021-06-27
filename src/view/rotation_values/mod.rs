@@ -18,6 +18,7 @@ const MESSAGE_2: &str = "Tap the black corner.";
 const CORNERS_COUNT: i8 = 4;
 const PHASES_COUNT: i8 = 5;
 
+#[derive(Clone)]
 pub struct RotationValues {
     id: Id,
     rect: Rectangle,

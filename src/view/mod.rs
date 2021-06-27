@@ -24,6 +24,7 @@ pub mod labeled_icon;
 pub mod top_bar;
 pub mod search_bar;
 pub mod dialog;
+pub mod overlay;
 pub mod notification;
 pub mod intermission;
 pub mod frontlight;
@@ -38,10 +39,13 @@ pub mod key;
 pub mod home;
 pub mod reader;
 pub mod dictionary;
-pub mod calculator;
-pub mod sketch;
 pub mod touch_events;
 pub mod rotation_values;
+pub mod textlabel;
+pub mod text;
+pub mod works;
+pub mod tag;
+//pub mod htmlview;
 
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
@@ -52,6 +56,8 @@ use std::collections::VecDeque;
 use std::fmt::{self, Debug};
 use fxhash::FxHashMap;
 use downcast_rs::{Downcast, impl_downcast};
+use dyn_clone::{DynClone, clone_trait_object};
+use url::Url;
 use crate::font::Fonts;
 use crate::document::{Location, TextLocation};
 use crate::settings::{ButtonScheme, FirstColumn, SecondColumn, RotationLock};
@@ -60,10 +66,10 @@ use crate::geom::{LinearDir, CycleDir, Rectangle, Boundary};
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::input::{DeviceEvent, FingerStatus};
 use crate::gesture::GestureEvent;
-use self::calculator::LineOrigin;
 use self::key::KeyKind;
 use self::intermission::IntermKind;
 use crate::app::Context;
+use crate::ao3_metadata::Ao3Info;
 
 // Border thicknesses in pixels, at 300 DPI.
 pub const THICKNESS_SMALL: f32 = 1.0;
@@ -77,15 +83,19 @@ pub const BORDER_RADIUS_LARGE: f32 = 12.0;
 
 // Big and small bar heights in pixels, at 300 DPI.
 // On the *Aura ONE*, the height is exactly `2 * sb + 10 * bb`.
+pub const MINI_BAR_HEIGHT: f32 = 100.0;
 pub const SMALL_BAR_HEIGHT: f32 = 121.0;
 pub const BIG_BAR_HEIGHT: f32 = 163.0;
+
+pub const SMALL_PADDING: f32 = 25.0;
+pub const LARGE_PADDING: f32 = 50.0;
 
 pub const CLOSE_IGNITION_DELAY: Duration = Duration::from_millis(150);
 
 pub type Bus = VecDeque<Event>;
 pub type Hub = Sender<Event>;
 
-pub trait View: Downcast {
+pub trait View: Downcast + DynClone {
     fn handle_event(&mut self, evt: &Event, hub: &Hub, bus: &mut Bus, rq: &mut RenderQueue, context: &mut Context) -> bool;
     fn render(&self, fb: &mut dyn Framebuffer, rect: Rectangle, fonts: &mut Fonts);
     fn rect(&self) -> &Rectangle;
@@ -131,7 +141,17 @@ pub trait View: Downcast {
     }
 }
 
+
 impl_downcast!(View);
+clone_trait_object!(View);
+
+pub trait Scrollable where Self: View + Downcast{
+    fn prev(&mut self, rq: &mut RenderQueue);
+    fn next(&mut self, rq: &mut RenderQueue);
+    fn set_size(&mut self, rect: Rectangle);
+}
+
+pub trait ScrollableView: View + Scrollable {}
 
 impl Debug for Box<dyn View> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -277,7 +297,9 @@ pub enum Event {
     Keyboard(KeyboardEvent),
     Key(KeyKind),
     Open(Box<Info>),
+    OpenWork(String),
     OpenHtml(String, Option<String>),
+    LoadIndex(String),
     LoadPixmap(usize),
     Update(UpdateMode),
     RefreshBookPreview(PathBuf, Option<PathBuf>),
@@ -287,6 +309,7 @@ pub enum Event {
     ResultsPage(CycleDir),
     GoTo(usize),
     GoToLocation(Location),
+    GoToTag(String),
     ResultsGoTo(usize),
     CropMargins(Box<Margin>),
     Chapter(CycleDir),
@@ -301,14 +324,20 @@ pub enum Event {
     Define(String),
     Submit(ViewId, String),
     Slider(SliderId, f32, FingerStatus),
+    ShowOverlay(String),
+    ToggleAbout,
+    ToggleToc,
+    ToggleFaveIcon,
+    ToggleFave(String, Url),
+    Kudos,
     ToggleNear(ViewId, Rectangle),
     ToggleInputHistoryMenu(ViewId, Rectangle),
     ToggleBookMenu(Rectangle, usize),
     TogglePresetMenu(Rectangle, usize),
     SubMenu(Rectangle, Vec<EntryKind>),
-    ProcessLine(LineOrigin, String),
     History(CycleDir, bool),
     Toggle(ViewId),
+    ToggleAboutWork(Ao3Info),
     Show(ViewId),
     Close(ViewId),
     CloseSub(ViewId),
@@ -351,8 +380,6 @@ pub enum Event {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AppCmd {
-    Sketch,
-    Calculator,
     Dictionary {
         query: String,
         language: String,
@@ -426,6 +453,9 @@ pub enum ViewId {
     LowBatteryNotif,
     NetUpNotif,
     SubMenu(u8),
+    Overlay,
+    AboutOverlay,
+    ChapterList
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

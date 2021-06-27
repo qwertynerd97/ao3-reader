@@ -28,6 +28,7 @@ use self::bottom_bar::BottomBar;
 const VIEWER_STYLESHEET: &str = "css/dictionary.css";
 const USER_STYLESHEET: &str = "css/dictionary-user.css";
 
+#[derive(Clone)]
 pub struct Dictionary {
     id: Id,
     rect: Rectangle,
@@ -101,11 +102,6 @@ impl Dictionary {
                                   "Dictionary".to_string(),
                                   context);
         children.push(Box::new(top_bar) as Box<dyn View>);
-
-        let separator = Filler::new(rect![rect.min.x, rect.min.y + small_height - small_thickness,
-                                          rect.max.x, rect.min.y + small_height + big_thickness],
-                                    BLACK);
-        children.push(Box::new(separator) as Box<dyn View>);
 
         let search_bar = SearchBar::new(rect![rect.min.x, rect.min.y + small_height + big_thickness,
                                               rect.max.x, rect.min.y + 2 * small_height - small_thickness],

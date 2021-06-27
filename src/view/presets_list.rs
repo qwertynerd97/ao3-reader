@@ -9,6 +9,7 @@ use crate::settings::LightPreset;
 use crate::color::WHITE;
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct PresetsList {
     id: Id,
     rect: Rectangle,

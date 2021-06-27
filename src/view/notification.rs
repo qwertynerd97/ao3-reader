@@ -14,6 +14,7 @@ use crate::app::Context;
 
 const NOTIFICATION_CLOSE_DELAY: Duration = Duration::from_secs(4);
 
+#[derive(Clone)]
 pub struct Notification {
     id: Id,
     rect: Rectangle,

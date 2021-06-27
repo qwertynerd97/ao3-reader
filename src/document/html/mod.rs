@@ -28,6 +28,7 @@ const USER_STYLESHEET: &str = "css/html-user.css";
 
 type UriCache = FxHashMap<String, usize>;
 
+#[derive(Clone)]
 pub struct HtmlDocument {
     text: String,
     content: Node,
@@ -148,6 +149,10 @@ impl HtmlDocument {
         self.cache_uris(&content, name, cache);
         cache.get(uri).cloned()
     }
+
+    // fn resolve_remote(&mut self, uri: &str) -> Option<usize> {
+    //     return reqwest::blocking::get(uri).ok()?.text().ok()?;
+    // }
 
     fn cache_uris(&mut self, node: &Node, name: &str, cache: &mut UriCache) {
         if let Some(id) = node.attr("id") {
@@ -283,7 +288,7 @@ impl Document for HtmlDocument {
     }
 
     fn pages_count(&self) -> usize {
-        self.size
+        self.pages.len()
     }
 
     fn toc(&mut self) -> Option<Vec<TocEntry>> {
@@ -324,8 +329,9 @@ impl Document for HtmlDocument {
                 }
             },
             Location::LocalUri(_, ref uri) | Location::Uri(ref  uri) => {
-                let mut cache = FxHashMap::default();
-                self.resolve_link(uri, &mut cache)
+                    let mut cache = FxHashMap::default();
+                    self.resolve_link(uri, &mut cache)
+                // }
             },
         }
     }

@@ -7,6 +7,7 @@ use crate::geom::{Rectangle};
 use crate::view::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, ViewId};
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct LibraryLabel {
     id: Id,
     rect: Rectangle,

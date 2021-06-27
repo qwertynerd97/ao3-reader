@@ -6,7 +6,7 @@ use crate::geom::Rectangle;
 use crate::font::Fonts;
 use crate::app::Context;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LabeledIcon {
     id: Id,
     rect: Rectangle,

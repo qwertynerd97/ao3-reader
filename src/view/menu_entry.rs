@@ -10,6 +10,7 @@ use crate::font::{Fonts, font_from_style, NORMAL_STYLE};
 use crate::color::{TEXT_NORMAL, TEXT_INVERTED_HARD};
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct MenuEntry {
     id: Id,
     rect: Rectangle,

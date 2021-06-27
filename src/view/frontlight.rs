@@ -20,6 +20,7 @@ use crate::app::Context;
 const LABEL_SAVE: &str = "Save";
 const LABEL_GUESS: &str = "Guess";
 
+#[derive(Clone)]
 pub struct FrontlightWindow {
     id: Id,
     rect: Rectangle,

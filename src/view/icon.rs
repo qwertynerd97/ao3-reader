@@ -20,14 +20,20 @@ lazy_static! {
         let mut m = FxHashMap::default();
         let scale = scale_by_dpi_raw(ICON_SCALE, CURRENT_DEVICE.dpi);
         let dir = Path::new("icons");
-        for name in ["home", "search", "back", "frontlight", "frontlight-disabled", "menu",
+        for name in ["home", "heart", "bookmark", "search", "back", "frontlight", "frontlight-disabled", "menu",
                      "angle-left", "angle-right", "angle-left-small", "angle-right-small",
                      "return", "shift", "combine", "alternate", "delete-backward", "delete-forward",
                      "move-backward", "move-backward-short", "move-forward", "move-forward-short",
                      "close",  "check_mark-small", "check_mark", "check_mark-large", "bullet",
-                     "arrow-left", "arrow-right", "angle-down", "angle-up", "crop", "toc", "font_family",
+                     "arrow-left", "arrow-right", "angle-down", "angle-up", "angle-down-grey",
+                     "angle-up-grey", "crop", "toc", "toc-grey", "font_family",
                      "font_size", "line_height", "align-justify", "align-left", "align-right",
-                     "align-center", "margin", "plug", "enclosed_menu", "contrast", "gray"].iter().cloned() {
+                     "align-center", "margin", "plug", "enclosed_menu", "contrast", "gray",
+                     "star", "star-outline",
+                     "explicit", "mature", "teen", "general",
+                     "complete", "wip", "blank",
+                     "other", "femslash", "slash", "het", "multi", "gen",
+                     "warning", "chosenotto", "external"].iter().cloned() {
             let path = dir.join(&format!("{}.svg", name));
             let doc = PdfOpener::new().and_then(|o| o.open(path)).unwrap();
             let pixmap = doc.page(0).and_then(|p| p.pixmap(scale)).unwrap();
@@ -37,6 +43,7 @@ lazy_static! {
     };
 }
 
+#[derive(Clone)]
 pub struct Icon {
     id: Id,
     pub rect: Rectangle,
@@ -153,6 +160,93 @@ impl View for Icon {
         if let Event::ToggleNear(_, ref mut event_rect) = self.event {
             *event_rect = rect;
         }
+        self.rect = rect;
+    }
+
+    fn rect(&self) -> &Rectangle {
+        &self.rect
+    }
+
+    fn rect_mut(&mut self) -> &mut Rectangle {
+        &mut self.rect
+    }
+
+    fn children(&self) -> &Vec<Box<dyn View>> {
+        &self.children
+    }
+
+    fn children_mut(&mut self) -> &mut Vec<Box<dyn View>> {
+        &mut self.children
+    }
+
+    fn id(&self) -> Id {
+        self.id
+    }
+}
+
+#[derive(Clone)]
+pub struct DisabledIcon {
+    id: Id,
+    pub rect: Rectangle,
+    children: Vec<Box<dyn View>>,
+    pub name: String,
+    background: u8,
+    align: Align,
+    corners: Option<CornerSpec>,
+}
+
+impl DisabledIcon {
+    pub fn new(name: &str, rect: Rectangle) -> DisabledIcon {
+        DisabledIcon {
+            id: ID_FEEDER.next(),
+            rect,
+            children: vec![],
+            name: name.to_string(),
+            background: TEXT_NORMAL[0],
+            align: Align::Center,
+            corners: None,
+        }
+    }
+
+    pub fn background(mut self, background: u8) -> DisabledIcon {
+        self.background = background;
+        self
+    }
+
+    pub fn align(mut self, align: Align) -> DisabledIcon {
+        self.align = align;
+        self
+    }
+
+    pub fn corners(mut self, corners: Option<CornerSpec>) -> DisabledIcon {
+        self.corners = corners;
+        self
+    }
+}
+
+impl View for DisabledIcon {
+    fn handle_event(&mut self, evt: &Event, _hub: &Hub, _bus: &mut Bus, _rq: &mut RenderQueue, _context: &mut Context) -> bool {
+        match *evt {
+            _ => false,
+        }
+    }
+
+    fn render(&self, fb: &mut dyn Framebuffer, _rect: Rectangle, _fonts: &mut Fonts) {
+        let pixmap = ICONS_PIXMAPS.get(&self.name[..]).unwrap();
+        let dx = self.align.offset(pixmap.width as i32, self.rect.width() as i32);
+        let dy = (self.rect.height() as i32 - pixmap.height as i32) / 2;
+        let pt = self.rect.min + pt!(dx, dy);
+
+        if let Some(ref cs) = self.corners {
+            fb.draw_rounded_rectangle(&self.rect, cs, self.background);
+        } else {
+            fb.draw_rectangle(&self.rect, self.background);
+        }
+
+        fb.draw_blended_pixmap(pixmap, pt, TEXT_NORMAL[1]);
+    }
+
+    fn resize(&mut self, rect: Rectangle, _hub: &Hub, _rq: &mut RenderQueue, _context: &mut Context) {
         self.rect = rect;
     }
 

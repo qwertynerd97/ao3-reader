@@ -4,6 +4,7 @@ use crate::geom::Rectangle;
 use crate::app::Context;
 use crate::font::Fonts;
 
+#[derive(Clone)]
 pub struct Filler {
     id: Id,
     pub rect: Rectangle,

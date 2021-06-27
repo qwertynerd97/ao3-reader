@@ -7,6 +7,7 @@ use crate::geom::Rectangle;
 use crate::color::TEXT_NORMAL;
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct Label {
     id: Id,
     rect: Rectangle,

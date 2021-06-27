@@ -1,4 +1,5 @@
 mod preset;
+mod ao3_settings;
 
 use std::env;
 use std::fmt::{self, Debug};
@@ -11,6 +12,7 @@ use crate::frontlight::LightLevels;
 use crate::color::BLACK;
 use crate::device::CURRENT_DEVICE;
 use crate::unit::mm_to_px;
+use self::ao3_settings::Ao3Settings;
 
 pub use self::preset::{LightPreset, guess_frontlight};
 
@@ -80,6 +82,7 @@ pub struct Settings {
     pub calculator: CalculatorSettings,
     pub battery: BatterySettings,
     pub frontlight_levels: LightLevels,
+    pub ao3: Ao3Settings
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -323,6 +326,7 @@ impl Default for HomeSettings {
     }
 }
 
+
 impl Default for ReaderSettings {
     fn default() -> Self {
         ReaderSettings {
@@ -410,6 +414,7 @@ impl Default for Settings {
             battery: BatterySettings::default(),
             frontlight_levels: LightLevels::default(),
             frontlight_presets: Vec::new(),
+            ao3: Ao3Settings::default(),
         }
     }
 }

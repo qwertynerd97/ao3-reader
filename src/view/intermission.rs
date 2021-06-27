@@ -8,6 +8,7 @@ use crate::framebuffer::Framebuffer;
 use crate::color::{TEXT_NORMAL, TEXT_INVERTED_HARD};
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct Intermission {
     id: Id,
     rect: Rectangle,
@@ -16,6 +17,7 @@ pub struct Intermission {
     halt: bool,
 }
 
+#[derive(Clone)]
 pub enum Message {
     Text(String),
     Image(PathBuf),

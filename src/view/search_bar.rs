@@ -12,7 +12,7 @@ use crate::app::Context;
 use crate::unit::scale_by_dpi;
 use crate::font::Fonts;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SearchBar {
     id: Id,
     pub rect: Rectangle,

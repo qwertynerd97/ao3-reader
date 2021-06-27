@@ -14,7 +14,7 @@ use crate::color::TEXT_BUMP_SMALL;
 use crate::unit::scale_by_dpi;
 use crate::app::Context;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DirectoriesBar {
     id: Id,
     pub rect: Rectangle,

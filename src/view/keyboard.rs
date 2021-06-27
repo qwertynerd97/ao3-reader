@@ -26,13 +26,14 @@ pub struct Layout {
     pub widths: Vec<Vec<f32>>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct State {
     shift: u8,
     alternate: u8,
     combine: bool,
-}
+} 
 
+#[derive(Clone)]
 pub struct Keyboard {
     id: Id,
     rect: Rectangle,

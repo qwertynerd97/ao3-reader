@@ -6,6 +6,7 @@ use crate::geom::{Rectangle};
 use crate::view::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData};
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct ResultsLabel {
     id: Id,
     rect: Rectangle,

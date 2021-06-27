@@ -51,7 +51,7 @@ use crate::app::Context;
 
 pub const TRASH_DIRNAME: &str = ".trash";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Home {
     id: Id,
     rect: Rectangle,
@@ -76,6 +76,25 @@ struct Fetcher {
     sort_method: Option<SortMethod>,
     first_column: Option<FirstColumn>,
     second_column: Option<SecondColumn>,
+}
+
+// NOTE: CLONE DOES NOT ACTUALLY WORK PROPERLY FOR FETCHER
+// it's only implemented so that that we can satisfy clonable views
+impl Clone for Fetcher {
+    fn clone(&self) -> Fetcher {
+        let process = Command::new(&self.path)
+                                 .spawn()
+                                 .unwrap();
+
+        Fetcher {
+            path: self.path.clone(),
+            full_path: self.full_path.clone(),
+            process: process,
+            sort_method: self.sort_method.clone(),
+            first_column: self.first_column.clone(),
+            second_column: self.second_column.clone()
+        }
+    }
 }
 
 impl Home {

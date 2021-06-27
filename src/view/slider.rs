@@ -11,6 +11,7 @@ use crate::app::Context;
 const PROGRESS_HEIGHT: f32 = 7.0;
 const BUTTON_DIAMETER: f32 = 46.0;
 
+#[derive(Clone)]
 pub struct Slider {
     id: Id,
     rect: Rectangle,

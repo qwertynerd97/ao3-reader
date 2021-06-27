@@ -11,6 +11,7 @@ use crate::app::Context;
 use crate::geom::{Rectangle, CornerSpec, BorderSpec};
 use crate::color::{TEXT_NORMAL, TEXT_INVERTED_HARD};
 
+#[derive(Clone)]
 pub struct RoundedButton {
     id: Id,
     rect: Rectangle,

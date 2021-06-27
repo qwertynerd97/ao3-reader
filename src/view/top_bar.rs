@@ -1,7 +1,7 @@
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::gesture::GestureEvent;
 use crate::input::DeviceEvent;
-use crate::view::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, ViewId, Align};
+use crate::view::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, ViewId, Align, THICKNESS_MEDIUM};
 use crate::view::icon::Icon;
 use crate::view::clock::Clock;
 use crate::view::battery::Battery;
@@ -9,8 +9,12 @@ use crate::view::label::Label;
 use crate::geom::{Rectangle};
 use crate::font::Fonts;
 use crate::app::Context;
+use crate::view::filler::Filler;
+use crate::unit::scale_by_dpi;
+use crate::color::BLACK;
+use crate::device::CURRENT_DEVICE;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TopBar {
     id: Id,
     rect: Rectangle,
@@ -20,9 +24,11 @@ pub struct TopBar {
 impl TopBar {
     pub fn new(rect: Rectangle, root_event: Event, title: String, context: &mut Context) -> TopBar {
         let id = ID_FEEDER.next();
+        let dpi = CURRENT_DEVICE.dpi;
         let mut children = Vec::new();
+        let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
 
-        let side = rect.height() as i32;
+        let side = rect.height() as i32 - thickness;
         let icon_name = match root_event {
             Event::Back => "back",
             _ => "search",
@@ -63,6 +69,11 @@ impl TopBar {
                                   menu_rect,
                                   Event::ToggleNear(ViewId::MainMenu, menu_rect));
         children.push(Box::new(menu_icon) as Box<dyn View>);
+
+        let separator = Filler::new(rect![rect.min.x, rect.max.y - thickness,
+            rect.max.x, rect.max.y],
+            BLACK);
+        children.push(Box::new(separator) as Box<dyn View>);
 
         TopBar {
             id,
@@ -107,7 +118,9 @@ impl View for TopBar {
     }
 
     fn resize(&mut self, rect: Rectangle, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        let side = rect.height() as i32;
+        let dpi = CURRENT_DEVICE.dpi;
+        let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
+        let side = rect.height() as i32 - thickness;
         self.children[0].resize(rect![rect.min, rect.min+side], hub, rq, context);
         let clock_width = self.children[2].rect().width() as i32;
         let clock_rect = rect![rect.max - pt!(3*side + clock_width, side),
@@ -126,6 +139,8 @@ impl View for TopBar {
                                 hub, rq, context);
         self.children[5].resize(rect![rect.max-side, rect.max],
                                 hub, rq, context);
+        self.children[6].resize(rect![rect.min.x, rect.max.y - thickness,
+            rect.max.x, rect.max.y], hub, rq, context);
         self.rect = rect;
     }
 

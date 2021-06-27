@@ -13,6 +13,7 @@ use crate::app::Context;
 
 pub const BUTTON_DIAMETER: f32 = 30.0;
 
+#[derive(Clone)]
 pub struct MarginCropper {
     id: Id,
     rect: Rectangle,

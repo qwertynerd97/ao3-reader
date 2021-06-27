@@ -237,7 +237,7 @@ impl Library {
                 }
             // The path is known: update the fp.
             } else if let Some(fp2) = self.paths.get(relat).cloned() {
-                println!("Update fingerprint for {}: {:016X} → {:016X}.", relat.display(), fp2, fp);
+                //println!("Update fingerprint for {}: {:016X} → {:016X}.", relat.display(), fp2, fp);
                 let info = self.db.remove(&fp2).unwrap();
                 self.db.insert(fp, info);
                 self.db[&fp].file.size = md.len();
@@ -269,7 +269,7 @@ impl Library {
                 // drift by one second, when the file is created within an operating system
                 // and moved within another.
                 if let Some(nfp) = nfp {
-                    println!("Update fingerprint for {}: {:016X} → {:016X}.", self.db[&nfp].file.path.display(), nfp, fp);
+                    //println!("Update fingerprint for {}: {:016X} → {:016X}.", self.db[&nfp].file.path.display(), nfp, fp);
                     let info = self.db.remove(&nfp).unwrap();
                     self.db.insert(fp, info);
                     let rp1 = self.reading_state_path(nfp);

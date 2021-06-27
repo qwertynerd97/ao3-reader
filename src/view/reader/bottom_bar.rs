@@ -12,7 +12,7 @@ use crate::color::WHITE;
 use crate::font::Fonts;
 use crate::app::Context;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BottomBar {
     id: Id,
     rect: Rectangle,

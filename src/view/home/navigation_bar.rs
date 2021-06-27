@@ -14,7 +14,7 @@ use crate::app::Context;
 use crate::font::{Fonts, font_from_style, NORMAL_STYLE};
 use crate::geom::{Point, Rectangle, Dir};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NavigationBar {
     id: Id,
     pub rect: Rectangle,

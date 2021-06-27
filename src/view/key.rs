@@ -120,6 +120,7 @@ impl KeyKind {
     }
 }
 
+#[derive(Clone)]
 pub struct Key {
     id: Id,
     rect: Rectangle,

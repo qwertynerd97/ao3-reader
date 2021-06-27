@@ -1,9 +1,8 @@
-pub mod djvu;
 pub mod pdf;
 pub mod epub;
 pub mod html;
+pub mod ao3;
 
-mod djvulibre_sys;
 mod mupdf_sys;
 
 use std::env;
@@ -21,15 +20,16 @@ use lazy_static::lazy_static;
 use unicode_normalization::UnicodeNormalization;
 use unicode_normalization::char::{is_combining_mark};
 use serde::{Serialize, Deserialize};
-use self::djvu::DjvuOpener;
 use self::pdf::PdfOpener;
 use self::epub::EpubDocument;
 use self::html::HtmlDocument;
+use self::ao3::Ao3Document;
 use crate::geom::{Boundary, CycleDir};
 use crate::metadata::{TextAlign, Annotation};
 use crate::framebuffer::Pixmap;
 use crate::settings::INTERNAL_CARD_ROOT;
 use crate::device::CURRENT_DEVICE;
+use crate::ao3_metadata::Ao3Info;
 
 pub const BYTES_PER_PAGE: f64 = 2048.0;
 
@@ -82,6 +82,12 @@ pub struct TocEntry {
     pub children: Vec<TocEntry>,
 }
 
+#[derive(Clone,Debug)]
+pub struct Chapter {
+    pub title: String,
+    pub location: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct Neighbors {
     pub previous_page: Option<usize>,
@@ -115,6 +121,33 @@ pub trait Document: Send+Sync {
     fn has_synthetic_page_numbers(&self) -> bool {
         false
     }
+
+    fn about(&self) -> String {
+        "".to_string()
+    }
+
+    fn kudos_token(&self) -> String {
+        "".to_string()
+    }
+
+
+    fn work_id(&self) -> String {
+        "".to_string()
+    }
+
+    fn ao3_meta(&self) -> Ao3Info {
+        Ao3Info::default()
+    }
+
+    fn chapterlist(&self) -> Vec<Chapter> {
+        let list = Vec::new();
+        list
+    }
+
+    fn has_chapters(&self) -> bool {
+        self.chapterlist().len() > 1
+    }
+
 
     fn save(&self, _path: &str) -> Result<(), Error> {
         Err(format_err!("This document can't be saved."))
@@ -204,12 +237,6 @@ pub fn open<P: AsRef<Path>>(path: P) -> Option<Box<dyn Document>> {
                 HtmlDocument::new(&path)
                              .map_err(|e| eprintln!("{}: {}.", path.as_ref().display(), e))
                              .map(|d| Box::new(d) as Box<dyn Document>).ok()
-            },
-            "djvu" | "djv" => {
-                DjvuOpener::new().and_then(|o| {
-                    o.open(path)
-                     .map(|d| Box::new(d) as Box<dyn Document>)
-                })
             },
             _ => {
                 PdfOpener::new().and_then(|o| {

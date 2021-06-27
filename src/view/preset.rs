@@ -10,6 +10,7 @@ use crate::color::{TEXT_NORMAL, TEXT_INVERTED_HARD};
 use crate::unit::scale_by_dpi;
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct Preset {
     id: Id,
     rect: Rectangle,
@@ -18,6 +19,7 @@ pub struct Preset {
     active: bool,
 }
 
+#[derive(Clone)]
 pub enum PresetKind {
     Normal(String, usize),
     Page(CycleDir),

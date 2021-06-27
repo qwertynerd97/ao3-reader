@@ -5,6 +5,7 @@ use crate::geom::Rectangle;
 use crate::app::Context;
 use crate::font::Fonts;
 
+#[derive(Clone)]
 pub struct Image {
     id: Id,
     rect: Rectangle,

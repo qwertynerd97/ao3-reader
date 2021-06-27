@@ -8,6 +8,7 @@ use crate::color::{BLACK, WHITE};
 use crate::geom::{Rectangle};
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct Clock {
     id: Id,
     rect: Rectangle,

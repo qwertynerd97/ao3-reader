@@ -12,6 +12,7 @@ use crate::color::{BLACK, WHITE};
 use crate::device::CURRENT_DEVICE;
 use crate::app::Context;
 
+#[derive(Clone)]
 pub struct NamedInput {
     id: Id,
     rect: Rectangle,

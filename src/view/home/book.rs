@@ -17,6 +17,7 @@ use crate::app::Context;
 
 const PROGRESS_HEIGHT: f32 = 13.0;
 
+#[derive(Clone)]
 pub struct Book {
     id: Id,
     rect: Rectangle,

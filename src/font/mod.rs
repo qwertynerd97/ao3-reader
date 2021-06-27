@@ -25,6 +25,8 @@ use crate::framebuffer::Framebuffer;
 // Font sizes in 1/64th of a point
 pub const FONT_SIZES: [u32; 3] = [349, 524, 629];
 
+pub const WORK_FONT_SIZES: [u32; 2] = [449, 575];
+
 pub const KEYBOARD_FONT_SIZES: [u32; 2] = [337, 843];
 
 pub const DISPLAY_FONT_SIZE: u32 = 2516;
@@ -53,9 +55,34 @@ pub const DISPLAY_STYLE: Style = Style {
     size: DISPLAY_FONT_SIZE,
 };
 
+pub const LABEL_STYLE: Style = Style {
+    family: Family::SansSerif,
+    variant: Variant::REGULAR,
+    size: FONT_SIZES[2],
+};
+
+pub const BOLD_STYLE: Style = Style {
+    family: Family::SansSerif,
+    variant: Variant::BOLD,
+    size: FONT_SIZES[2],
+};
+
+pub const ABOUT_STYLE: Style = Style {
+    family: Family::SansSerif,
+    variant: Variant::BOLD,
+    size: KEYBOARD_FONT_SIZES[1],
+};
+
+
 pub const MD_TITLE: Style = Style {
     family: Family::Serif,
     variant: Variant::ITALIC,
+    size: FONT_SIZES[2],
+};
+
+pub const BOLD_TITLE: Style = Style {
+    family: Family::Serif,
+    variant: Variant::BOLDITALIC,
     size: FONT_SIZES[2],
 };
 
@@ -64,6 +91,19 @@ pub const MD_AUTHOR: Style = Style {
     variant: Variant::REGULAR,
     size: FONT_SIZES[1],
 };
+
+pub const WORK_LARGE: Style = Style {
+    family: Family::Serif,
+    variant: Variant::REGULAR,
+    size: WORK_FONT_SIZES[1],
+};
+
+pub const WORK_SMALL: Style = Style {
+    family: Family::SansSerif,
+    variant: Variant::REGULAR,
+    size: WORK_FONT_SIZES[0],
+};
+
 
 pub const MD_YEAR: Style = NORMAL_STYLE;
 
@@ -384,6 +424,7 @@ extern {
 
 pub const SLIDER_VALUE: Style = MD_SIZE;
 
+#[derive(Clone)]
 pub struct FontFamily {
     pub regular: Font,
     pub italic: Font,
@@ -521,6 +562,7 @@ bitflags! {
         const REGULAR = 0;
         const ITALIC = 1;
         const BOLD = 2;
+        const BOLDITALIC = Self::ITALIC.bits | Self::BOLD.bits;
     }
 }
 
@@ -533,6 +575,7 @@ pub enum Family {
     Display,
 }
 
+#[derive(Clone)]
 pub struct Style {
     family: Family,
     variant: Variant,
@@ -981,6 +1024,7 @@ pub struct FontLibrary(*mut FtLibrary);
 
 pub struct FontOpener(Rc<FontLibrary>);
 
+#[derive(Clone)]
 pub struct Font {
     lib: Rc<FontLibrary>,
     face: *mut FtFace,
