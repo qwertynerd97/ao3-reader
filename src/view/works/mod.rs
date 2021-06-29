@@ -58,7 +58,7 @@ pub struct Works {
 }
 
 impl Works {
-    pub fn new(rect: Rectangle, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) -> Result<Works, Error> {
+    pub fn new(rect: Rectangle, index_url: String, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) -> Result<Works, Error> {
         let id = ID_FEEDER.next();
         let dpi = CURRENT_DEVICE.dpi;
         let mut children = Vec::new();
@@ -89,18 +89,10 @@ impl Works {
 
         let mut y_start = rect.min.y + small_height + big_thickness;
 
-        // let title_rect = rect![rect.min.x, y_start,
-        //                         rect.max.x, y_start + small_height + thickness];
-
-        // y_start = title_rect.max.y;
-        // shelf_index += 1;
-
-        let base_path = &context.settings.ao3.base_path;
-
         let mut workindex = WorkIndex::new(rect![rect.min.x, y_start,
                                          rect.max.x, rect.max.y],
                                    false,
-                                   base_path.clone(),
+                                   index_url,
                                    hub,
                                    context);
 
@@ -111,25 +103,7 @@ impl Works {
         let works_count = workindex.max_works;
         let works_lines = workindex.max_lines;
 
-
-
-        // let title_bar = TitleBar::new(title_rect, title, url, context);
-
-        // children.push(Box::new(title_bar) as Box<dyn View>);
         children.push(Box::new(workindex) as Box<dyn View>);
-
-        // let separator = Filler::new(rect![rect.min.x, rect.max.y - small_height - small_thickness,
-        //                                   rect.max.x, rect.max.y - small_height + big_thickness],
-        //                             BLACK);
-        // children.push(Box::new(separator) as Box<dyn View>);
-
-        // let bottom_bar = BottomBar::new(rect![rect.min.x, rect.max.y - small_height - small_thickness,
-        //                                       rect.max.x, rect.max.y],
-        //                                 current_page,
-        //                                 pages_count,
-        //                                 works_count,
-        //                                 works_lines);
-        // children.push(Box::new(bottom_bar) as Box<dyn View>);
 
         rq.add(RenderData::new(id, rect, UpdateMode::Full));
 
@@ -149,13 +123,6 @@ impl Works {
             works_count,
             works_lines
         })
-    }
-
-    fn adjust_shelf_top_edge(&mut self) {
-        let index = self.shelf_index - 2;
-        let y_shift = self.children[index].rect().max.y - self.children[index+1].rect().min.y;
-        *self.children[index+1].rect_mut() += pt!(0, y_shift);
-        self.children[index+2].rect_mut().min.y = self.children[index+1].rect().max.y;
     }
 
     fn go_to_page(&mut self, index: usize, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
@@ -590,13 +557,13 @@ impl Works {
     //     context.library.sort(self.sort_method, self.reverse_order);
     //     self.refresh_visibles(true, false, hub, &mut RenderQueue::new(), context);
 
-    //     if let Some(top_bar) = self.child_mut(0).downcast_mut::<TopBar>() {
-    //         top_bar.update_frontlight_icon(&mut RenderQueue::new(), context);
-    //         hub.send(Event::ClockTick).ok();
-    //         hub.send(Event::BatteryTick).ok();
-    //     }
+        if let Some(top_bar) = self.child_mut(0).downcast_mut::<TopBar>() {
+            top_bar.update_frontlight_icon(&mut RenderQueue::new(), context);
+            hub.send(Event::ClockTick).ok();
+            hub.send(Event::BatteryTick).ok();
+        }
 
-    //     rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
+        rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
     }
 }
 

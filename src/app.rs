@@ -433,7 +433,8 @@ pub fn run() -> Result<(), Error> {
     let mut tasks: Vec<Task> = Vec::new();
     let mut history: Vec<HistoryItem> = Vec::new();
     let mut rq = RenderQueue::new();
-    let mut view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), &tx,
+    let base_path = &context.settings.ao3.base_path;
+    let mut view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), base_path.to_string(), &tx,
                                                      &mut rq, &mut context)?);
 
     let mut updating = FxHashMap::default();
@@ -928,9 +929,8 @@ pub fn run() -> Result<(), Error> {
             },
             Event::LoadIndex( link_uri) => {
                 view.children_mut().retain(|child| !child.is::<Menu>());
-                let mut r = WorkIndex::new(context.fb.rect(), false, link_uri, &tx, &mut context);
-                r.get_works(&context, &mut rq);
-                let mut next_view = Box::new(r) as Box<dyn View>;
+                let mut next_view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), link_uri, &tx,
+                                                     &mut rq, &mut context)?);
                 transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
                 history.push(HistoryItem {
                     view,

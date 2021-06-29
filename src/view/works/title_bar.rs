@@ -30,6 +30,11 @@ impl TitleBar {
         let mut children = Vec::new();
         let side = rect.height() as i32 - thickness;
 
+        let root_icon = Icon::new("back",
+                                  rect![rect.min, rect.min+side],
+                                  Event::Back);
+        children.push(Box::new(root_icon) as Box<dyn View>);
+
         let title_label = Label::new(rect![rect.min.x, rect.min.y, rect.max.x - side, rect.max.y - thickness],
         title.clone(), Align::Left(side));
         children.push(Box::new(title_label) as Box<dyn View>);
@@ -57,14 +62,14 @@ impl TitleBar {
     }
 
     fn update_icon(&mut self, rq: &mut RenderQueue) {
-        let index = self.len() - 1;
+        let index = self.len() - 2;
         let icon_rect = *self.children[index].rect();
         let icon = if self.fave { "star" } else { "star-outline" };
         let fave_icon = Icon::new(icon,
                 icon_rect,
                 Event::ToggleFaveIcon);
         self.children[index] = Box::new(fave_icon) as Box<dyn View>;
-        rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
+        rq.add(RenderData::new(self.id, icon_rect, UpdateMode::Gui));
     }
 
 }

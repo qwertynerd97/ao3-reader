@@ -155,7 +155,7 @@ impl View for Tag {
             Event::Gesture(GestureEvent::Tap(center)) if self.in_rects(center) => {
                 rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
                 self.active = true;
-                bus.push_back(Event::GoToTag(self.loc.clone().unwrap()));
+                bus.push_back(Event::LoadIndex(self.loc.clone().unwrap()));
                 true
             },
             _ => false,

@@ -1,0 +1,29 @@
+name: release
+
+on: [workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: (armhf) build image
+      run: docker build . -f Dockerfile -t plato:armhf
+    - name: (armhf) build plato
+      run: docker run --rm -t -v $(pwd)/target:/plato/target -v $(pwd)/src:/plato/src plato:armhf
+    - name: (armhf) update zips
+      run: |
+        cp $(pwd)/target:/plato/target/arm-unknown-linux-gnueabihf/release/plato $(pwd)/plato
+        zip -r OCP-base.zip $(pwd)/icons && zip -r update-base.zip $(pwd)/icons
+        zip OCP-base.zip $(pwd)/Settings.toml && zip update-base.zip $(pwd)/Settings.toml
+        zip OCP-base.zip $(pwd)/plato && zip update-base.zip $(pwd)/plato
+    - uses: "marvinpinto/action-automatic-releases@latest"
+      with:
+        repo_token: "${{ secrets.GITHUB_TOKEN }}"
+        automatic_release_tag: "latest"
+        prerelease: true
+        title: "Development Build"
+        files: |
+          OCP-base.zip
+          update-base.zip
+          plato
