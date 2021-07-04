@@ -1,9 +1,8 @@
-use crate::device::CURRENT_DEVICE;
 use crate::framebuffer::{Framebuffer};
 use crate::settings::ReaderSettings;
 use crate::metadata::{ReaderInfo};
 //use crate::metadata::{DEFAULT_CONTRAST_EXPONENT, DEFAULT_CONTRAST_GRAY};
-use crate::view::{Align,  View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, ViewId, THICKNESS_MEDIUM};
+use crate::view::{Align,  View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, ViewId};
 // use crate::view::filler::Filler;
 // use crate::view::slider::Slider;
 use crate::view::icon::{Icon, DisabledIcon};
@@ -11,7 +10,6 @@ use crate::view::icon::{Icon, DisabledIcon};
 use crate::view::label::Label;
 use crate::gesture::GestureEvent;
 use crate::input::DeviceEvent;
-use crate::unit::scale_by_dpi;
 use crate::geom::Rectangle;
 use crate::font::Fonts;
 // use crate::color::{SEPARATOR_NORMAL, WHITE};
@@ -146,143 +144,35 @@ impl View for ToolBar {
     }
 
     fn resize(&mut self, rect: Rectangle, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        let dpi = CURRENT_DEVICE.dpi;
-        let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
-        let side = (rect.height() as i32 + thickness) / 2 - thickness;
+        let side = rect.height() as i32;
 
         let mut index = 0;
 
-        //TODO - this needs to match the generation fuction
-        if self.reflowable {
-            let mut remaining_width = rect.width() as i32 - 3 * side;
-            let font_family_label_width = remaining_width / 2;
-            remaining_width -= font_family_label_width;
-            let margin_label_width = remaining_width / 2;
-            let line_height_label_width = remaining_width - margin_label_width;
-
-            // First row.
-
-            let mut x_offset = rect.min.x;
-            self.children[index].resize(rect![x_offset, rect.min.y,
-                                              x_offset + side + margin_label_width, rect.min.y + side],
-                                        hub, rq, context);
-            index += 1;
-            x_offset += side + margin_label_width;
-
-            self.children[index].resize(rect![x_offset, rect.min.y,
-                                              x_offset + side + font_family_label_width, rect.min.y + side],
-                                        hub, rq, context);
-            index += 1;
-            x_offset += side + font_family_label_width;
-
-            self.children[index].resize(rect![x_offset, rect.min.y,
-                                              x_offset + side + line_height_label_width, rect.min.y + side],
-                                        hub, rq, context);
-            index += 1;
-
-            // Separator.
-            self.children[index].resize(rect![rect.min.x, rect.min.y + side,
-                                              rect.max.x, rect.max.y - side],
-                                        hub, rq, context);
-            index += 1;
-
-            // Start of second row.
-            let text_align_rect = rect![rect.min.x, rect.max.y - side,
-                                        rect.min.x + side, rect.max.y];
-            self.children[index].resize(text_align_rect, hub, rq, context);
-            index += 1;
-
-            let font_size_rect = rect![rect.min.x + side, rect.max.y - side,
-                                       rect.min.x + 2 * side, rect.max.y];
-            self.children[index].resize(font_size_rect, hub, rq, context);
-            index += 1;
-
-            self.children[index].resize(rect![rect.min.x + 2 * side, rect.max.y - side,
-                                              rect.max.x - 2 * side, rect.max.y],
-                                        hub, rq, context);
-            index += 1;
-        } else {
-            let remaining_width = rect.width() as i32 - 2 * side;
-            let slider_width = remaining_width / 2;
-
-            // First row.
-            let contrast_icon_rect = rect![rect.min.x, rect.min.y,
-                                           rect.min.x + side, rect.min.y + side];
-
-            self.children[index].resize(contrast_icon_rect, hub, rq, context);
-            index += 1;
-
-            self.children[index].resize(rect![rect.min.x + side, rect.min.y,
-                                              rect.min.x + side + slider_width, rect.min.y + side],
-                                        hub, rq, context);
-            index += 1;
-
-            let gray_icon_rect = rect![rect.min.x + side + slider_width, rect.min.y,
-                                       rect.min.x + 2 * side + slider_width, rect.min.y + side];
-
-            self.children[index].resize(gray_icon_rect, hub, rq, context);
-            index += 1;
-
-            self.children[index].resize(rect![rect.min.x + 2 * side + slider_width, rect.min.y,
-                                              rect.max.x - side / 3, rect.min.y + side],
-                                        hub, rq, context);
-            index += 1;
-
-            self.children[index].resize(rect![rect.max.x - side / 3,
-                                              rect.min.y,
-                                              rect.max.x,
-                                              rect.min.y + side],
-                                        hub, rq, context);
-            index += 1;
-
-            // Separator.
-            self.children[index].resize(rect![rect.min.x, rect.min.y + side,
-                                              rect.max.x, rect.max.y - side],
-                                        hub, rq, context);
-            index += 1;
-
-            // Start of second row.
-            self.children[index].resize(rect![rect.min.x, rect.max.y - side,
-                                              rect.min.x + side, rect.max.y],
-                                        hub, rq, context);
-            index += 1;
-
-            let remaining_width = rect.width() as i32 - 3 * side;
-            let margin_label_width = self.children[index+1].rect().width() as i32;
-            let big_padding = (remaining_width - margin_label_width) / 2;
-            let small_padding = remaining_width - margin_label_width - big_padding;
-
-            self.children[index].resize(rect![rect.min.x + side,
-                                              rect.max.y - side,
-                                              rect.min.x + side + small_padding,
-                                              rect.max.y],
-                                        hub, rq, context);
-
-            index += 1;
-            self.children[index].resize(rect![rect.min.x + side + small_padding,
-                                              rect.max.y - side,
-                                              rect.max.x - 2 * side - big_padding,
-                                              rect.max.y],
-                                        hub, rq, context);
-            index += 1;
-            self.children[index].resize(rect![rect.max.x - 2 * side - big_padding,
-                                              rect.max.y - side,
-                                              rect.max.x - 2 * side,
-                                              rect.max.y],
-                                        hub, rq, context);
-            index += 1;
-        }
-
-        // End of second row.
-
-        self.children[index].resize(rect![rect.max.x - 2 * side, rect.max.y - side,
-                                          rect.max.x - side, rect.max.y],
-                                    hub, rq, context);
+        // Chapters icon
+        self.children[index].resize(rect![rect.min.x, rect.max.y - side,
+            side, rect.max.y],
+            hub, rq, context);
         index += 1;
 
-        self.children[index].resize(rect![rect.max.x - side, rect.max.y - side,
-                                         rect.max.x, rect.max.y],
-                                    hub, rq, context);
+        let remaining_width = rect.width() as i32 - 4 * side;
+
+        // About Work label
+        self.children[index].resize(rect![rect.min.x + side, rect.min.y,
+            remaining_width + side, rect.min.y + side],
+            hub, rq, context);
+        index += 1;
+
+        // Kudos icon
+        self.children[index].resize(rect![remaining_width + rect.min.x + side, rect.min.y,
+            remaining_width + 2 * side + rect.min.x, rect.min.y + side],
+            hub, rq, context);
+        index += 1;
+
+        // Bookmark icon
+        self.children[index].resize(rect![remaining_width + 2 * side + rect.min.x, rect.min.y,
+            remaining_width + 3 * side + rect.min.x, rect.max.y],
+            hub, rq, context);
+
         self.rect = rect;
     }
 

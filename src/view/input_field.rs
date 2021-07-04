@@ -251,6 +251,7 @@ impl View for InputField {
                         }
                     },
                     KeyboardEvent::Submit => {
+                        println!("Submitting for {:?}", self.view_id);
                         bus.push_back(Event::Submit(self.view_id, self.text.clone()));
                         context.record_input(&self.text, self.view_id);
                     },

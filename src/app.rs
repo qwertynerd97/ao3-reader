@@ -13,6 +13,9 @@ use globset::Glob;
 use walkdir::WalkDir;
 use rand_core::SeedableRng;
 use rand_xoshiro::Xoroshiro128Plus;
+use reqwest::blocking::{Client};
+use reqwest::redirect::{Policy};
+use reqwest::StatusCode;
 use crate::dictionary::{Dictionary, load_dictionary_from_file};
 use crate::framebuffer::{Framebuffer, KoboFramebuffer, Display, UpdateMode};
 use crate::view::{View, Event, EntryId, EntryKind, ViewId, AppCmd, RenderData, RenderQueue};
@@ -29,18 +32,16 @@ use crate::document::sys_info_as_html;
 use crate::input::{DeviceEvent, PowerSource, ButtonCode, ButtonStatus, VAL_RELEASE, VAL_PRESS};
 use crate::input::{raw_events, device_events, usb_events, display_rotate_event, button_scheme_event};
 use crate::gesture::{GestureEvent, gesture_events};
-use crate::helpers::{load_json, load_toml, save_toml, IsHidden};
+use crate::helpers::{load_json, load_toml, save_toml, IsHidden, get_url};
 use crate::settings::{ButtonScheme, Settings, SETTINGS_PATH, RotationLock};
 use crate::frontlight::{Frontlight, StandardFrontlight, NaturalFrontlight, PremixedFrontlight};
 use crate::lightsensor::{LightSensor, KoboLightSensor};
 use crate::battery::{Battery, KoboBattery};
 use crate::geom::{Rectangle, DiagDir, Region};
-use crate::view::home::Home;
 use crate::view::works::Works;
 use crate::view::reader::Reader;
-use crate::view::works::workindex::WorkIndex;
 use crate::view::dialog::Dialog;
-use crate::view::overlay::Overlay;
+use crate::view::home::Home;
 use crate::view::overlay::about::About;
 use crate::view::intermission::{Intermission, IntermKind};
 use crate::view::notification::Notification;
@@ -434,8 +435,9 @@ pub fn run() -> Result<(), Error> {
     let mut history: Vec<HistoryItem> = Vec::new();
     let mut rq = RenderQueue::new();
     let base_path = &context.settings.ao3.base_path;
-    let mut view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), base_path.to_string(), &tx,
-                                                     &mut rq, &mut context)?);
+    let mut view: Box<dyn View> = Box::new(Home::new(context.fb.rect(), &mut rq, &mut context));
+    // let mut view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), base_path.to_string(), &tx,
+    //                                                  &mut rq, &mut context)?);
 
     let mut updating = FxHashMap::default();
     let current_dir = env::current_dir()?;
@@ -928,17 +930,53 @@ pub fn run() -> Result<(), Error> {
                 view = next_view;
             },
             Event::LoadIndex( link_uri) => {
-                view.children_mut().retain(|child| !child.is::<Menu>());
-                let mut next_view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), link_uri, &tx,
-                                                     &mut rq, &mut context)?);
-                transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
-                history.push(HistoryItem {
-                    view,
-                    rotation: context.display.rotation,
-                    monochrome: context.fb.monochrome(),
-                    dithered: context.fb.dithered(),
-                });
-                view = next_view;
+                println!("loading tag {}", link_uri);
+
+                let url = get_url(&link_uri);
+                let client = Client::builder().redirect(Policy::none()).build().unwrap();
+                let res = client.get(url.as_str()).send();
+                match res {
+                    Ok(r) => {
+                        match r.status() {
+                            StatusCode::OK => {
+                                view.children_mut().retain(|child| !child.is::<Menu>());
+                                let mut next_view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), link_uri, &tx,
+                                                                     &mut rq, &mut context)?);
+                                transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
+                                history.push(HistoryItem {
+                                    view,
+                                    rotation: context.display.rotation,
+                                    monochrome: context.fb.monochrome(),
+                                    dithered: context.fb.dithered(),
+                                });
+                                view = next_view;
+                            },
+                            StatusCode::FOUND |
+                            StatusCode::MOVED_PERMANENTLY => {
+                                // TODO: change this when we can look at tag pages
+                                let msg = format!("Unwrangled tag! No works available.");
+                                let notif = Notification::new(ViewId::MessageNotif,
+                                    msg, &tx, &mut rq, &mut context);
+                                view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                            },
+                            _ => {
+                                println!("Got {} for {}", r.status(), link_uri);
+                                let msg = format!("Error: {}", r.status());
+                                let notif = Notification::new(ViewId::MessageNotif,
+                                    msg, &tx, &mut rq, &mut context);
+                                view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        println!("Error fetching {} - {}", link_uri, e);
+                        let msg = format!("Error: {}", e);
+                        let notif = Notification::new(ViewId::MessageNotif,
+                            msg, &tx, &mut rq, &mut context);
+                        view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                    }
+                };
+
             },
             Event::Select(EntryId::Launch(app_cmd)) => {
                 view.children_mut().retain(|child| !child.is::<Menu>());
@@ -1147,6 +1185,24 @@ pub fn run() -> Result<(), Error> {
             },
             Event::ToggleFave(title, url)  => {
                 context.settings.ao3.toggle_fave(title, url);
+            },
+            Event::Select(EntryId::SetFontFamily(ref font_family)) => {
+                context.settings.reader.font_family = font_family.to_string(); 
+            },
+            Event::Select(EntryId::SetTextAlign(text_align)) => {
+                context.settings.reader.text_align = text_align;
+            },
+            Event::Select(EntryId::SetFontSize(v)) => {
+                let font_size = context.settings.reader.font_size;
+                let font_size = font_size - 1.0 + v as f32 / 10.0;
+                context.settings.reader.font_size = font_size;
+            },
+            Event::Select(EntryId::SetMarginWidth(width)) => {
+                context.settings.reader.margin_width = width; 
+            },
+            Event::Select(EntryId::SetLineHeight(v)) => {
+                let line_height = 1.0 + v as f32 / 10.0;
+                context.settings.reader.line_height = line_height;
             },
             _ => {
                 handle_event(view.as_mut(), &evt, &tx, &mut bus, &mut rq, &mut context);

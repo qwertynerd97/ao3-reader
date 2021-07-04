@@ -22,14 +22,14 @@ No, but you're welcome to fork this and do it yourself! The changes I've already
 * Will crash immediately on load if it can't reach Ao3 (either because of lack of wifi or because the site is down)
 * Works with anonymous authors will show as having no authors
 * Changing reader display settings doesn't alter current reader instances
-* Clicking on a tag in the About Work overlay inside the reader does nothing
 * About Work overlay currently missing summary/stats items
 * About Work overlay pages past the 1st not accessible due to positioning
 * Bookmarks icon does nothing.
+* 'Go To Page' doesn't work in work index
 
 ## To be Done:
 * Other views (Author, Series, Bookmarks, Collections)
-* Home page
+* Nicer landing page
 * Search form
 * Access to reading/leaving comments
 * Work blocklist
@@ -38,6 +38,7 @@ No, but you're welcome to fork this and do it yourself! The changes I've already
 * Option to set global default search parameters
 * Option to save works for offline reading
 * Show Ao3 symbols grid in various views
+* Rendering of remote images
 
 ## Questions:
 * Does this render properly on devices other than the Glo?

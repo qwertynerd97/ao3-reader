@@ -209,17 +209,7 @@ pub struct ReaderInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cropping_margins: Option<CroppingMargins>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub margin_width: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub screen_margin_width: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub font_family: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub font_size: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub text_align: Option<TextAlign>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub line_height: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contrast_exponent: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -270,12 +260,7 @@ impl Default for ReaderInfo {
             page_offset: None,
             rotation: None,
             cropping_margins: None,
-            margin_width: None,
             screen_margin_width: None,
-            font_family: None,
-            font_size: None,
-            text_align: None,
-            line_height: None,
             contrast_exponent: None,
             contrast_gray: None,
             page_names: BTreeMap::new(),

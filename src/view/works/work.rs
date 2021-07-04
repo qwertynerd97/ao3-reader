@@ -9,6 +9,7 @@ use crate::font::{Fonts, font_from_style};
 use crate::geom::{Rectangle, halves};
 use crate::app::Context;
 use crate::http::list_to_str;
+use serde::{Serialize, Deserialize};
 
 const SIZE_BASE: f32 = 1000.0;
 
@@ -32,7 +33,7 @@ pub struct Work {
     length: WorkView
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum WorkView {
     Long,
     Short
@@ -62,10 +63,10 @@ impl View for Work {
                 let id = &self.info.id;
                 rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
                 hub.send(Event::OpenWork(id.to_string())).ok();
+                self.active = false;
                 true
             },
             Event::Gesture(GestureEvent::HoldFingerShort(center, ..)) if self.rect.includes(center) => {
-                let pt = pt!(center.x, self.rect.center().y);
                 bus.push_back(Event::ToggleAboutWork(self.info.clone()));
                 true
             },
@@ -190,6 +191,8 @@ impl View for Work {
                     plan = temp_plan;
                     tag_lines += 1;
                     start_y += (small_baseline / 4) * 3;
+                } else {
+                    break;
                 }
             }
             
@@ -213,7 +216,16 @@ impl View for Work {
             let font = font_from_style(fonts, &MD_KIND, dpi);
             let plan = font.plan(&date, None, None);
             let pt = pt!(self.rect.max.x - padding - plan.width,
-                            self.rect.max.y -  2 * baseline);
+                            self.rect.max.y -  3 * small_baseline);
+            font.render(fb, scheme[1], &plan, pt);
+        }
+
+        // Word Count
+        {
+            let font = font_from_style(fonts, &MD_SIZE, dpi);
+            let plan = font.plan(&self.info.chapters, None, None);
+            let pt = pt!(self.rect.max.x - padding - plan.width,
+                            self.rect.max.y - 2 * small_baseline);
             font.render(fb, scheme[1], &plan, pt);
         }
 
@@ -223,7 +235,7 @@ impl View for Work {
             let font = font_from_style(fonts, &MD_SIZE, dpi);
             let plan = font.plan(&size, None, None);
             let pt = pt!(self.rect.max.x - padding - plan.width,
-                         self.rect.max.y - baseline);
+                         self.rect.max.y - small_baseline);
             font.render(fb, scheme[1], &plan, pt);
         }
     }

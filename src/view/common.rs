@@ -8,7 +8,7 @@ use crate::metadata::{ReaderInfo, TextAlign};
 use crate::framebuffer::UpdateMode;
 use crate::font::family_names;
 use crate::geom::{Point, Rectangle};
-use super::{View, RenderQueue, RenderData, ViewId, AppCmd, EntryId, EntryKind};
+use super::{View, RenderQueue, RenderData, ViewId, EntryId, EntryKind};
 use super::menu::{Menu, MenuKind};
 use super::notification::Notification;
 use crate::app::Context;
@@ -89,8 +89,7 @@ pub fn toggle_main_menu(view: &mut dyn View, rect: Rectangle, enable: Option<boo
         ).collect::<Vec<EntryKind>>();
 
         // Font size options
-        let font_size = reader_info.as_ref().and_then(|r| r.font_size)
-        .unwrap_or(context.settings.reader.font_size);
+        let font_size = context.settings.reader.font_size;
         let min_font_size = context.settings.reader.font_size / 2.0;
         let max_font_size = 3.0 * context.settings.reader.font_size / 2.0;
         let font_size_entries = (0..=20).filter_map(|v| {
@@ -105,8 +104,7 @@ pub fn toggle_main_menu(view: &mut dyn View, rect: Rectangle, enable: Option<boo
             }).collect();
         
         // Text align options
-        let text_align = reader_info.as_ref().and_then(|r| r.text_align)
-        .unwrap_or(context.settings.reader.text_align);
+        let text_align = context.settings.reader.text_align;
         let choices = [TextAlign::Justify, TextAlign::Left, TextAlign::Right, TextAlign::Center];
         let text_align_entries = choices.iter().map(|v| {
         EntryKind::RadioButton(v.to_string(),
@@ -115,8 +113,7 @@ pub fn toggle_main_menu(view: &mut dyn View, rect: Rectangle, enable: Option<boo
         }).collect();
 
         // Line Height options 
-        let line_height = reader_info.as_ref()
-                                .and_then(|r| r.line_height).unwrap_or(context.settings.reader.line_height);
+        let line_height = context.settings.reader.line_height;
         let line_height_entries = (0..=10).map(|x| {
             let lh = 1.0 + x as f32 / 10.0;
             EntryKind::RadioButton(format!("{:.1}", lh),
@@ -125,9 +122,7 @@ pub fn toggle_main_menu(view: &mut dyn View, rect: Rectangle, enable: Option<boo
         }).collect();
 
         // Margin width options
-        let margin_width = reader_info.as_ref()
-                                .and_then(|r| r.margin_width)
-                                .unwrap_or_else(|| context.settings.reader.margin_width);
+        let margin_width = context.settings.reader.margin_width;
         let margin_width_entries = (0..=10).map(|mw| EntryKind::RadioButton(format!("{}", mw),
                                                                 EntryId::SetMarginWidth(mw),
                                                                 mw == margin_width)).collect();
@@ -136,9 +131,7 @@ pub fn toggle_main_menu(view: &mut dyn View, rect: Rectangle, enable: Option<boo
         let mut families = family_names(&context.settings.reader.font_path)
         .map_err(|e| eprintln!("Can't get family names: {}", e))
         .unwrap_or_default();
-        let current_family = reader_info.as_ref()
-        .and_then(|r| r.font_family.clone())
-        .unwrap_or_else(|| context.settings.reader.font_family.clone());
+        let current_family = context.settings.reader.font_family.clone();
         families.insert(DEFAULT_FONT_FAMILY.to_string());
         let font_family_entries = families.iter().map(|f| EntryKind::RadioButton(f.clone(),
                                             EntryId::SetFontFamily(f.clone()),

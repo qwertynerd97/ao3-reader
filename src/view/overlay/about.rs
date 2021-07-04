@@ -8,7 +8,7 @@ use crate::document::{Location, Chapter};
 use crate::device::CURRENT_DEVICE;
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use super::Overlay;
-use crate::font::{LABEL_STYLE, BOLD_STYLE, BOLD_TITLE};
+use crate::font::{LABEL_STYLE, BOLD_STYLE, BOLD_TITLE, ABOUT_STYLE};
 use crate::view::tag::Tag;
 use crate::ao3_metadata::Ao3Info;
 use crate::helpers::ceil;
@@ -20,82 +20,10 @@ pub struct About {
     id: Id,
     view_id: ViewId,
     page: Vec<Tag>,
-    index: Vec<u32>,
+    index: Vec<usize>,
     current_page: usize,
     max_pages: usize
 }
-
-// pub struct AboutPage {
-//     labels: Vec<Vec<(RenderPlan, Point)>,
-//     children: Vec<Tag>
-// }
-
-// pub fn gen_section(start_pt: Point, width: i32, offset: i32, fonts: &mut Fonts, items: mut Vec<AboutItem>, line_height: i32) -> Vec<Tag> {
-//     let mut start_x = start_pt.x;
-//     let mut start_y = start_pt.y;
-//     let mut tag_list = Vec::new();
-
-//     for item in items {
-//         if item.loc.is_none() && start_x != 0 {
-//             // tags without locations are labels, and start on a new line always.
-//             start_y += line_height;
-//             start_x = 0;
-//         }
-//         let tag_rect = rect![start_x, start_y, width, start_y + line_height];
-//         let tag = Tag::new(tag_rect, item.title, width, offset, item.loc, fonts, item.style);
-//         let end_pt = tag.end_point();
-//         let lines = tag.lines();
-//         let rem_width = width as i32 - end_pt.x;
-
-//         if rem_width < line_height {
-//             start_y += lines as i32 * line_height;
-//             start_x = 0;
-//         } else {
-//             start_x = end_pt.x + padding;
-//             start_y += (lines as i32 - 1 ) * line_height;
-//         }
-
-//         tag_list.push(tag);
-//     }
-
-//     tag_list
-// }
-
-// pub fn gen_pages(rect: Rectangle, info: Ao3Info, fonts: &mut Fonts) -> Vec<AboutPage> {
-//     let dpi = CURRENT_DEVICE.dpi;
-//     let header_font = font_from_style(fonts, &MD_TITLE, dpi);
-//     let font = font_from_style(fonts, &LABEL_STYLE, dpi);
-//     let font_height = font.line_height();
-//     let box_height = font_height * 1.5;
-//     let max_lines = rect.height() / box_height;
-//     let line_height = rect.height() / max_lines;
-
-//     let mut items = Vec::new();
-
-//     items.push(AboutItem::new(info.title, None, MD_TITLE));
-//     items.push(AboutItem("by ".to_string(), None, LABEL_STYLE));
-//     for author in info.authors {
-//         let temp = author.clone();
-//         items.push(AboutItem::new(temp.title, Some(Location::Uri(temp.location)), LABEL_STYLE));
-//     }
-//     items.push(AboutItem("Fandoms:".to_string(), None, BOLD_STYLE));
-//     for fandom in info.fandoms {
-//         let temp = fandom.clone();
-//         items.push(AboutItem::new(temp.title, Some(Location::Uri(temp.location)), LABEL_STYLE));
-//     }
-
-//     items.push(AboutItem("Tags:".to_string(), None, BOLD_STYLE));
-//     for tag in info.tags {
-//         let temp = tag.clone();
-//         items.push(AboutItem::new(temp.title, Some(Location::Uri(temp.location)), LABEL_STYLE));
-//     }
-
-//     let mut pages_lines = 0;
-//     while pages_lines <= max_lines {
-
-//     }
-
-// }
 
 impl About {
     pub fn new(info: Ao3Info, context: &mut Context) -> About {
@@ -105,6 +33,7 @@ impl About {
         // Figure out our line heights
         let dpi = CURRENT_DEVICE.dpi;
         let rect = overlay.msg_rect();
+        println!("rect is {:?}", rect);
         let font = font_from_style(&mut context.fonts, &LABEL_STYLE, dpi);
         let font_height = font.line_height();
         let box_height = font_height * 3 / 2;
@@ -123,14 +52,17 @@ impl About {
         items.push(("Fandoms:".to_string(), None, BOLD_STYLE));
         for fandom in info.fandoms {
             let temp = fandom.clone();
-            items.push((temp.title, Some(temp.location), LABEL_STYLE));
+            items.push((temp.title, Some(temp.location), ABOUT_STYLE));
         }
     
         items.push(("Tags:".to_string(), None, BOLD_STYLE));
         for tag in info.tags {
             let temp = tag.clone();
-            items.push((temp.title, Some(temp.location), LABEL_STYLE));
+            items.push((temp.title, Some(temp.location), ABOUT_STYLE));
         }
+
+        items.push(("Summary:".to_string(), None, BOLD_STYLE));
+        items.push((info.summary.clone(), None, LABEL_STYLE));
 
         // Actually generate the items
         let padding = scale_by_dpi(SMALL_PADDING, dpi) as i32;
@@ -177,7 +109,8 @@ impl About {
             if end_pt > (rect.max.y * pg_count){
                 if tag.lines() > 1 {
                     // we need to split a tag
-                    let split = ceil((end_pt - rect.max.y) as usize, line_height as usize);
+                    let split = rect.max.y * pg_count;
+                    println!("Tag lines is {}, split is {}", tag.lines(), split);
                     let new_tag = tag.split(split);
                     page.push(tag); 
                     i += 1;
@@ -197,15 +130,16 @@ impl About {
             i += 1;
         }
 
+        println!("indexes are {:?}", index);
         // Shift all pages appropriately up.
-        // for (page_i, count) in index.iter().enumerate() {
-        //     let offset = count * rect.height();
-        //     let next = (count + 1) as usize;
-        //     let end = if next < index.len() {index[next] as usize } else { page.len() };
-        //     for tag in &page[page_i..end] {
-        //         tag.shift_vertical(offset as i32);
-        //     }
-        // }
+        for (count, page_i) in index.iter().enumerate() {
+            let offset = count as u32 * rect.height();
+            let next = (count + 1) as usize;
+            let end = if next < index.len() {index[next] as usize } else { page.len() };
+            for tag in &mut page[*page_i..end] {
+                tag.shift_vertical(offset as i32);
+            }
+        }
 
         let max_pages = index.len();
         overlay.set_max(max_pages);
@@ -216,9 +150,12 @@ impl About {
         let mut children = Vec::new();
         children.push(Box::new(overlay.clone()) as Box<dyn View>);
         for tag in temp {
+            // println!("tag rects are {:?}", tag.rects);
+            // println!("Tag link is {:?}", tag.loc);
             children.push(Box::new(tag) as Box<dyn View>);
         }
-
+        // println!("child len is {}", children.len());
+        // println!("-------");
 
         About {
             overlay,
@@ -241,9 +178,14 @@ impl About {
         //let page_items = Vec::from_iter(self.page[start..end].iter().cloned());
         let temp = Vec::from(&self.page[start..end]);
 
+        
         for tag in temp {
+            // println!("tag rects are {:?}", tag.rects);
+            // println!("Tag link is {:?}", tag.loc);
             self.children_mut().push(Box::new(tag) as Box<dyn View>);
         }
+        // println!("child len is {}", self.children.len());
+        // println!("-------");
     }
 }
 
@@ -259,7 +201,7 @@ impl View for About {
                 rq.add(RenderData::new(self.id, *self.rect(), UpdateMode::Gui));
                 true
             },
-            Event::GoToTag(..) => {
+            Event::LoadIndex(..) => {
                 hub.send(Event::Close(self.view_id)).ok();
                 false
             },

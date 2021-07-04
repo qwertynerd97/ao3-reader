@@ -94,6 +94,7 @@ impl View for NamedInput {
     fn handle_event(&mut self, evt: &Event, _hub: &Hub, bus: &mut Bus, _rq: &mut RenderQueue, context: &mut Context) -> bool {
         match *evt {
             Event::Submit(..) => {
+                println!("Closing input view {:?}", self.view_id);
                 bus.push_back(Event::Close(self.view_id));
                 false
             },

@@ -1,6 +1,7 @@
 use serde::{Serialize, Deserialize};
 use crate::helpers::url_strip_page;
-use url::{Url, ParseError};
+use url::{Url};
+use crate::view::works::work::WorkView;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
@@ -10,7 +11,8 @@ pub struct Ao3Settings {
     pub username: Option<String>,
     pub login_cookie: Option<String>,
     pub base_path: String,
-    pub faves: Vec<(String, Url)>
+    pub faves: Vec<(String, Url)>,
+    pub work_display: WorkView
 }
 
 impl Ao3Settings {
@@ -44,7 +46,8 @@ impl Default for Ao3Settings {
             username: None,
             login_cookie: None,
             base_path: "".to_string(),
-            faves: Vec::new()
+            faves: Vec::new(),
+            work_display: WorkView::Short
         }
     }
 }

@@ -111,7 +111,7 @@ impl View for Intermission {
 
                 font.render(fb, scheme[1], &plan, pt!(dx, dy));
 
-                let doc = PdfOpener::new().and_then(|o| o.open("icons/dodecahedron.svg")).unwrap();
+                let doc = PdfOpener::new().and_then(|o| o.open("icons/logo.svg")).unwrap();
                 let page = doc.page(0).unwrap();
                 let (width, height) = page.dims();
                 let scale = (plan.width as f32 / width.max(height) as f32) / 4.0;

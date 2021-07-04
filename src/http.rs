@@ -63,6 +63,21 @@ pub fn test_login(res: Result<Response, Error>, cookie_set: bool) -> bool {
     logged_in
 }
 
+pub fn scrape_inner_text(frag: &Html, select: &str) -> String{
+    let selector = Selector::parse(select).unwrap();
+    match frag.select(&selector).next() {
+        Some(el) => {
+            let raw_text = el.text().collect::<Vec<_>>().join("");
+            let trimmed = raw_text.trim();
+            let text = decode_entities(trimmed).into_owned();
+            return text; 
+        }
+        None => {
+            return "####".to_string();
+        }
+    };
+}
+
 pub fn scrape_csrf(frag: &Html) -> String {
     let token = Selector::parse(r#"input[name="authenticity_token"]"#).unwrap();
     let input = frag.select(&token).next().unwrap();

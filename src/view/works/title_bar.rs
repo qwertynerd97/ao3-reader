@@ -35,8 +35,8 @@ impl TitleBar {
                                   Event::Back);
         children.push(Box::new(root_icon) as Box<dyn View>);
 
-        let title_label = Label::new(rect![rect.min.x, rect.min.y, rect.max.x - side, rect.max.y - thickness],
-        title.clone(), Align::Left(side));
+        let title_label = Label::new(rect![rect.min.x + side, rect.min.y, rect.max.x - side, rect.max.y - thickness],
+        title.clone(), Align::Left(0));
         children.push(Box::new(title_label) as Box<dyn View>);
 
         let icon = if fave { "star" } else { "star-outline" };

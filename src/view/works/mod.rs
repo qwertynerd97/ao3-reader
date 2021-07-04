@@ -83,7 +83,7 @@ impl Works {
         let top_bar = TopBar::new(rect![rect.min.x, rect.min.y,
                                         rect.max.x, rect.min.y + small_height + big_thickness],
                                   Event::Toggle(ViewId::SearchBar),
-                                  sort_method.title(),
+                                  "".to_string(),
                                   context);
         children.push(Box::new(top_bar) as Box<dyn View>);
 
@@ -125,29 +125,20 @@ impl Works {
         })
     }
 
-    fn go_to_page(&mut self, index: usize, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        if index >= self.pages_count {
-            return;
-        }
-        self.current_page = index;
-        self.update_shelf(false, hub, rq, context);
-        self.update_bottom_bar(rq);
-    }
+    // fn go_to_neighbor(&mut self, dir: CycleDir, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+    //     match dir {
+    //         CycleDir::Next if self.current_page < self.pages_count.saturating_sub(1) => {
+    //             self.current_page += 1;
+    //         },
+    //         CycleDir::Previous if self.current_page > 0 => {
+    //             self.current_page -= 1;
+    //         },
+    //         _ => return,
+    //     }
 
-    fn go_to_neighbor(&mut self, dir: CycleDir, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        match dir {
-            CycleDir::Next if self.current_page < self.pages_count.saturating_sub(1) => {
-                self.current_page += 1;
-            },
-            CycleDir::Previous if self.current_page > 0 => {
-                self.current_page -= 1;
-            },
-            _ => return,
-        }
-
-        self.update_shelf(false, hub, rq, context);
-        self.update_bottom_bar(rq);
-    }
+    //     self.update_shelf(false, hub, rq, context);
+    //     self.update_bottom_bar(rq);
+    // }
 
     // NOTE: This function assumes that the workindex wasn't resized.
     fn refresh_visibles(&mut self, update: bool, reset_page: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
@@ -214,7 +205,6 @@ impl Works {
             let top_bar = self.children[index].as_mut().downcast_mut::<TopBar>().unwrap();
             let name = if search_visible { "back" } else { "search" };
             top_bar.update_root_icon(name, rq);
-            top_bar.update_title_label(&self.sort_method.title(), rq);
         }
     }
 
@@ -427,67 +417,67 @@ impl Works {
         }
     }
 
-    fn toggle_sort_menu(&mut self, rect: Rectangle, enable: Option<bool>, rq: &mut RenderQueue, context: &mut Context) {
-        if let Some(index) = locate_by_id(self, ViewId::SortMenu) {
-            if let Some(true) = enable {
-                return;
-            }
-            rq.add(RenderData::expose(*self.child(index).rect(), UpdateMode::Gui));
-            self.children.remove(index);
-        } else {
-            if let Some(false) = enable {
-                return;
-            }
-            let entries = vec![EntryKind::RadioButton("Date Opened".to_string(),
-                                                      EntryId::Sort(SortMethod::Opened),
-                                                      self.sort_method == SortMethod::Opened),
-                               EntryKind::RadioButton("Date Added".to_string(),
-                                                      EntryId::Sort(SortMethod::Added),
-                                                      self.sort_method == SortMethod::Added),
-                               EntryKind::RadioButton("Progress".to_string(),
-                                                      EntryId::Sort(SortMethod::Progress),
-                                                      self.sort_method == SortMethod::Progress),
-                               EntryKind::RadioButton("Author".to_string(),
-                                                      EntryId::Sort(SortMethod::Author),
-                                                      self.sort_method == SortMethod::Author),
-                               EntryKind::RadioButton("Title".to_string(),
-                                                      EntryId::Sort(SortMethod::Title),
-                                                      self.sort_method == SortMethod::Title),
-                               EntryKind::RadioButton("Year".to_string(),
-                                                      EntryId::Sort(SortMethod::Year),
-                                                      self.sort_method == SortMethod::Year),
-                               EntryKind::RadioButton("File Size".to_string(),
-                                                      EntryId::Sort(SortMethod::Size),
-                                                      self.sort_method == SortMethod::Size),
-                               EntryKind::RadioButton("File Type".to_string(),
-                                                      EntryId::Sort(SortMethod::Kind),
-                                                      self.sort_method == SortMethod::Kind),
-                               EntryKind::RadioButton("File Name".to_string(),
-                                                      EntryId::Sort(SortMethod::FileName),
-                                                      self.sort_method == SortMethod::FileName),
-                               EntryKind::RadioButton("File Path".to_string(),
-                                                      EntryId::Sort(SortMethod::FilePath),
-                                                      self.sort_method == SortMethod::FilePath),
-                               EntryKind::Separator,
-                               EntryKind::CheckBox("Reverse Order".to_string(),
-                                                   EntryId::ReverseOrder, self.reverse_order)];
-            let sort_menu = Menu::new(rect, ViewId::SortMenu, MenuKind::DropDown, entries, context);
-            rq.add(RenderData::new(sort_menu.id(), *sort_menu.rect(), UpdateMode::Gui));
-            self.children.push(Box::new(sort_menu) as Box<dyn View>);
-        }
-    }
+    // fn toggle_sort_menu(&mut self, rect: Rectangle, enable: Option<bool>, rq: &mut RenderQueue, context: &mut Context) {
+    //     if let Some(index) = locate_by_id(self, ViewId::SortMenu) {
+    //         if let Some(true) = enable {
+    //             return;
+    //         }
+    //         rq.add(RenderData::expose(*self.child(index).rect(), UpdateMode::Gui));
+    //         self.children.remove(index);
+    //     } else {
+    //         if let Some(false) = enable {
+    //             return;
+    //         }
+    //         let entries = vec![EntryKind::RadioButton("Date Opened".to_string(),
+    //                                                   EntryId::Sort(SortMethod::Opened),
+    //                                                   self.sort_method == SortMethod::Opened),
+    //                            EntryKind::RadioButton("Date Added".to_string(),
+    //                                                   EntryId::Sort(SortMethod::Added),
+    //                                                   self.sort_method == SortMethod::Added),
+    //                            EntryKind::RadioButton("Progress".to_string(),
+    //                                                   EntryId::Sort(SortMethod::Progress),
+    //                                                   self.sort_method == SortMethod::Progress),
+    //                            EntryKind::RadioButton("Author".to_string(),
+    //                                                   EntryId::Sort(SortMethod::Author),
+    //                                                   self.sort_method == SortMethod::Author),
+    //                            EntryKind::RadioButton("Title".to_string(),
+    //                                                   EntryId::Sort(SortMethod::Title),
+    //                                                   self.sort_method == SortMethod::Title),
+    //                            EntryKind::RadioButton("Year".to_string(),
+    //                                                   EntryId::Sort(SortMethod::Year),
+    //                                                   self.sort_method == SortMethod::Year),
+    //                            EntryKind::RadioButton("File Size".to_string(),
+    //                                                   EntryId::Sort(SortMethod::Size),
+    //                                                   self.sort_method == SortMethod::Size),
+    //                            EntryKind::RadioButton("File Type".to_string(),
+    //                                                   EntryId::Sort(SortMethod::Kind),
+    //                                                   self.sort_method == SortMethod::Kind),
+    //                            EntryKind::RadioButton("File Name".to_string(),
+    //                                                   EntryId::Sort(SortMethod::FileName),
+    //                                                   self.sort_method == SortMethod::FileName),
+    //                            EntryKind::RadioButton("File Path".to_string(),
+    //                                                   EntryId::Sort(SortMethod::FilePath),
+    //                                                   self.sort_method == SortMethod::FilePath),
+    //                            EntryKind::Separator,
+    //                            EntryKind::CheckBox("Reverse Order".to_string(),
+    //                                                EntryId::ReverseOrder, self.reverse_order)];
+    //         let sort_menu = Menu::new(rect, ViewId::SortMenu, MenuKind::DropDown, entries, context);
+    //         rq.add(RenderData::new(sort_menu.id(), *sort_menu.rect(), UpdateMode::Gui));
+    //         self.children.push(Box::new(sort_menu) as Box<dyn View>);
+    //     }
+    // }
 
-    fn set_status(&mut self, path: &Path, status: SimpleStatus, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        // context.library.set_status(path, status);
+    // fn set_status(&mut self, path: &Path, status: SimpleStatus, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+    //     context.library.set_status(path, status);
 
-        // // Is the current sort method affected by this change?
-        // if self.sort_method == SortMethod::Progress ||
-        //    self.sort_method == SortMethod::Opened {
-        //     self.sort(false, hub, rq, context);
-        // }
+    //     // Is the current sort method affected by this change?
+    //     if self.sort_method == SortMethod::Progress ||
+    //        self.sort_method == SortMethod::Opened {
+    //         self.sort(false, hub, rq, context);
+    //     }
 
-        // self.refresh_visibles(true, false, hub, rq, context);
-    }
+    //     self.refresh_visibles(true, false, hub, rq, context);
+    // }
 
     fn remove(&mut self, path: &Path, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) -> Result<(), Error> {
         let trash_path = context.library.home.join(TRASH_DIRNAME);
@@ -516,38 +506,38 @@ impl Works {
         Ok(())
     }
 
-    fn set_reverse_order(&mut self, value: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        self.reverse_order = value;
-        self.current_page = 0;
-        self.sort(true, hub, rq, context);
-    }
+    // fn set_reverse_order(&mut self, value: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+    //     self.reverse_order = value;
+    //     self.current_page = 0;
+    //     self.sort(true, hub, rq, context);
+    // }
 
-    fn set_sort_method(&mut self, sort_method: SortMethod, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        self.sort_method = sort_method;
-        self.reverse_order = sort_method.reverse_order();
+    // fn set_sort_method(&mut self, sort_method: SortMethod, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+    //     self.sort_method = sort_method;
+    //     self.reverse_order = sort_method.reverse_order();
 
-        if let Some(index) = locate_by_id(self, ViewId::SortMenu) {
-            self.child_mut(index)
-                .children_mut().last_mut().unwrap()
-                .downcast_mut::<MenuEntry>().unwrap()
-                .update(sort_method.reverse_order(), rq);
-        }
+    //     if let Some(index) = locate_by_id(self, ViewId::SortMenu) {
+    //         self.child_mut(index)
+    //             .children_mut().last_mut().unwrap()
+    //             .downcast_mut::<MenuEntry>().unwrap()
+    //             .update(sort_method.reverse_order(), rq);
+    //     }
 
-        self.current_page = 0;
-        self.sort(true, hub, rq, context);
-    }
+    //     self.current_page = 0;
+    //     self.sort(true, hub, rq, context);
+    // }
 
-    fn sort(&mut self, update: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        context.library.sort(self.sort_method, self.reverse_order);
-        sort(&mut self.visible_books, self.sort_method, self.reverse_order);
+    // fn sort(&mut self, update: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+    //     context.library.sort(self.sort_method, self.reverse_order);
+    //     sort(&mut self.visible_books, self.sort_method, self.reverse_order);
 
-        if update {
-            self.update_shelf(false, hub, rq, context);
-            let search_visible = rlocate::<SearchBar>(self).is_some();
-            self.update_top_bar(search_visible, rq);
-            self.update_bottom_bar(rq);
-        }
-    }
+    //     if update {
+    //         self.update_shelf(false, hub, rq, context);
+    //         let search_visible = rlocate::<SearchBar>(self).is_some();
+    //         self.update_top_bar(search_visible, rq);
+    //         self.update_bottom_bar(rq);
+    //     }
+    // }
 
     fn flush(&mut self, context: &mut Context) {
         context.library.flush();
@@ -582,20 +572,20 @@ impl View for Works {
                 hub.send(Event::Select(EntryId::Rotate(n))).ok();
                 true
             },
-            Event::Gesture(GestureEvent::Arrow { dir, .. }) => {
-                match dir {
-                    Dir::West => self.go_to_page(0, hub, rq, context),
-                    Dir::East => {
-                        let pages_count = self.pages_count;
-                        self.go_to_page(pages_count.saturating_sub(1), hub, rq, context);
-                    },
-                    Dir::North => {
-//TODO - add new gesture?
-                    },
-                    Dir::South => self.toggle_search_bar(None, true, hub, rq, context),
-                };
-                true
-            },
+//             Event::Gesture(GestureEvent::Arrow { dir, .. }) => {
+//                 match dir {
+//                     Dir::West => self.go_to_page(0, hub, rq, context),
+//                     Dir::East => {
+//                         let pages_count = self.pages_count;
+//                         self.go_to_page(pages_count.saturating_sub(1), hub, rq, context);
+//                     },
+//                     Dir::North => {
+// //TODO - add new gesture?
+//                     },
+//                     Dir::South => self.toggle_search_bar(None, true, hub, rq, context),
+//                 };
+//                 true
+//             },
             Event::Focus(v) => {
                 if self.focus != v {
                     self.focus = v;
@@ -617,10 +607,10 @@ impl View for Works {
                 self.toggle_search_bar(None, true, hub, rq, context);
                 true
             },
-            Event::ToggleNear(ViewId::TitleMenu, rect) => {
-                self.toggle_sort_menu(rect, None, rq, context);
-                true
-            },
+            // Event::ToggleNear(ViewId::TitleMenu, rect) => {
+            //     self.toggle_sort_menu(rect, None, rq, context);
+            //     true
+            // },
             Event::ToggleNear(ViewId::MainMenu, rect) => {
                 toggle_main_menu(self, rect, None, rq, context);
                 true
@@ -637,10 +627,10 @@ impl View for Works {
                 self.toggle_search_bar(Some(false), true, hub, rq, context);
                 true
             },
-            Event::Close(ViewId::SortMenu) => {
-                self.toggle_sort_menu(Rectangle::default(), Some(false), rq, context);
-                true
-            },
+            // Event::Close(ViewId::SortMenu) => {
+            //     self.toggle_sort_menu(Rectangle::default(), Some(false), rq, context);
+            //     true
+            // },
             Event::Close(ViewId::MainMenu) => {
                 toggle_main_menu(self, Rectangle::default(), Some(false), rq, context);
                 true
@@ -649,21 +639,17 @@ impl View for Works {
                 self.toggle_go_to_page(Some(false), hub, rq, context);
                 true
             },
-            Event::Select(EntryId::Sort(sort_method)) => {
-                self.set_sort_method(sort_method, hub, rq, context);
-                true
-            },
-            Event::Select(EntryId::ReverseOrder) => {
-                let next_value = !self.reverse_order;
-                self.set_reverse_order(next_value, hub, rq, context);
-                true
-            },
+            // Event::Select(EntryId::Sort(sort_method)) => {
+            //     self.set_sort_method(sort_method, hub, rq, context);
+            //     true
+            // },
+            // Event::Select(EntryId::ReverseOrder) => {
+            //     let next_value = !self.reverse_order;
+            //     self.set_reverse_order(next_value, hub, rq, context);
+            //     true
+            // },
             Event::Select(EntryId::Flush) => {
                 self.flush(context);
-                true
-            },
-            Event::Select(EntryId::SetStatus(ref path, status)) => {
-                self.set_status(path, status, hub, rq, context);
                 true
             },
             Event::Select(EntryId::ThumbnailPreviews) => {
@@ -696,15 +682,17 @@ impl View for Works {
                 true
             },
             Event::Submit(ViewId::GoToPageInput, ref text) => {
+                println!("works: Go to page {}", text);
+                let workindex = self.children[self.shelf_index].as_mut().downcast_mut::<WorkIndex>().unwrap();
                 if text == "(" {
-                    self.go_to_page(0, hub, rq, context);
+                    workindex.go_to_page(0, hub, rq, context);
                 } else if text == ")" {
-                    self.go_to_page(self.pages_count.saturating_sub(1), hub, rq, context);
+                    workindex.go_to_page(self.pages_count.saturating_sub(1), hub, rq, context);
                 } else if text == "_" {
                     let index = (context.rng.next_u64() % self.pages_count as u64) as usize;
-                    self.go_to_page(index, hub, rq, context);
+                    workindex.go_to_page(index, hub, rq, context);
                 } else if let Ok(index) = text.parse::<usize>() {
-                    self.go_to_page(index.saturating_sub(1), hub, rq, context);
+                    workindex.go_to_page(index.saturating_sub(1), hub, rq, context);
                 }
                 true
             },
@@ -766,30 +754,30 @@ impl View for Works {
                 self.update_bottom_bar(rq);
                 false
             },
-            Event::GoTo(location) => {
-                self.go_to_page(location as usize, hub, rq, context);
-                true
-            },
-            Event::Chapter(dir) => {
-                let pages_count = self.pages_count;
-                match dir {
-                    CycleDir::Previous => self.go_to_page(0, hub, rq, context),
-                    CycleDir::Next => self.go_to_page(pages_count.saturating_sub(1), hub, rq, context),
-                }
-                true
-            },
-            Event::Page(dir) => {
-                self.go_to_neighbor(dir, hub, rq, context);
-                true
-            },
-            Event::Device(DeviceEvent::Button { code: ButtonCode::Backward, status: ButtonStatus::Pressed, .. }) => {
-                self.go_to_neighbor(CycleDir::Previous, hub, rq, context);
-                true
-            },
-            Event::Device(DeviceEvent::Button { code: ButtonCode::Forward, status: ButtonStatus::Pressed, .. }) => {
-                self.go_to_neighbor(CycleDir::Next, hub, rq, context);
-                true
-            },
+            // Event::GoTo(location) => {
+            //     self.go_to_page(location as usize, hub, rq, context);
+            //     true
+            // },
+            // Event::Chapter(dir) => {
+            //     let pages_count = self.pages_count;
+            //     match dir {
+            //         CycleDir::Previous => self.go_to_page(0, hub, rq, context),
+            //         CycleDir::Next => self.go_to_page(pages_count.saturating_sub(1), hub, rq, context),
+            //     }
+            //     true
+            // },
+            // Event::Page(dir) => {
+            //     self.go_to_neighbor(dir, hub, rq, context);
+            //     true
+            // },
+            // Event::Device(DeviceEvent::Button { code: ButtonCode::Backward, status: ButtonStatus::Pressed, .. }) => {
+            //     self.go_to_neighbor(CycleDir::Previous, hub, rq, context);
+            //     true
+            // },
+            // Event::Device(DeviceEvent::Button { code: ButtonCode::Forward, status: ButtonStatus::Pressed, .. }) => {
+            //     self.go_to_neighbor(CycleDir::Next, hub, rq, context);
+            //     true
+            // },
             Event::Device(DeviceEvent::NetUp) => {
                 //TODO new event
                 true

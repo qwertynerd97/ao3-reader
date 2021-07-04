@@ -1,11 +1,13 @@
 use crate::device::CURRENT_DEVICE;
 use crate::gesture::GestureEvent;
 use crate::font::{Fonts};
+use rand_core::RngCore;
 use crate::color::{WHITE, SEPARATOR_NORMAL};
 use crate::geom::{Rectangle, CycleDir, Dir, halves, divide};
 use crate::framebuffer::{Framebuffer, UpdateMode};
-use crate::view::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData};
+use crate::view::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, ViewId};
 use crate::view::{THICKNESS_MEDIUM, BIG_BAR_HEIGHT, SMALL_BAR_HEIGHT};
+use crate::input::{DeviceEvent, ButtonCode, ButtonStatus};
 use crate::unit::scale_by_dpi;
 use crate::app::Context;
 use super::work::{Work, WorkView};
@@ -33,6 +35,7 @@ pub struct WorkIndex {
     children: Vec<Box<dyn View>>,
     pages: FxHashMap<usize, IndexPage>,
     pub max_lines: usize,
+    pub work_display: WorkView,
     thumbnail_previews: bool,
     pub current_page: usize,
     pub max_page: usize,
@@ -76,8 +79,14 @@ impl WorkIndex {
         let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
         let (small_thickness, _big) = halves(thickness);
 
+        let work_display = context.settings.ao3.work_display.clone();
         let height = rect.height() as i32 - (2 * small_height + 2 * small_thickness);
-        let max_lines = (height / big_height) as usize;
+        let work_height = match work_display {
+            WorkView::Short => big_height,
+            WorkView::Long => 2 * big_height
+        };
+
+        let max_lines = (height / work_height) as usize;
         let url = get_url(&source_url);
         let works_rect = rect![rect.min.x, rect.min.y + small_height + small_thickness, rect.max.x, rect.max.y - small_height - small_thickness];
 
@@ -106,6 +115,7 @@ impl WorkIndex {
             rect,
             works_rect,
             children,
+            work_display,
             max_lines,
             thumbnail_previews,
             current_page: 0,
@@ -213,7 +223,7 @@ impl WorkIndex {
                                  info.clone(),
                                  index,
                                 self.thumbnail_previews,
-                                WorkView::Short);
+                                self.work_display.clone());
             self.children.push(Box::new(work) as Box<dyn View>);
 
             if index < self.max_lines - 1 {
@@ -242,17 +252,56 @@ impl WorkIndex {
         self.current_page = page;
     }
 
+    pub fn go_to_page(&mut self, index: usize, _hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+        println!("trying to go to page  {}", index);
+        if index >= self.max_page {
+            return;
+        }
+        self.current_page = index;
+        self.get_works(context, rq);
+        self.update_bottom_bar(rq);
+    }
+
     pub fn update_bottom_bar(&mut self, rq: &mut RenderQueue) {
         let bottom_bar = self.children[1].as_mut().downcast_mut::<BottomBar>().unwrap();
         bottom_bar.update_works_label(self.current_page, self.max_works, self.max_lines, rq);
         bottom_bar.update_page_label(self.current_page, self.max_page, rq);
         bottom_bar.update_icons(self.current_page, self.max_page, rq);
     }
+
+    fn go_to_neighbor(&mut self, dir: CycleDir, _hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+        match dir {
+            CycleDir::Next if self.current_page < self.max_page.saturating_sub(1) => {
+                self.current_page += 1;
+            },
+            CycleDir::Previous if self.current_page > 0 => {
+                self.current_page -= 1;
+            },
+            _ => return,
+        }
+
+        self.get_works(context, rq);
+        self.update_bottom_bar(rq);
+    }
 }
 
 impl View for WorkIndex {
-    fn handle_event(&mut self, evt: &Event, _hub: &Hub, bus: &mut Bus, _rq: &mut RenderQueue, _context: &mut Context) -> bool {
+    fn handle_event(&mut self, evt: &Event, hub: &Hub, bus: &mut Bus, rq: &mut RenderQueue, context: &mut Context) -> bool {
         match *evt {
+            Event::Submit(ViewId::GoToPageInput, ref text) => {
+                println!("Go to page {}", text);
+                if text == "(" {
+                    self.go_to_page(0, hub, rq, context);
+                } else if text == ")" {
+                    self.go_to_page(self.max_page.saturating_sub(1), hub, rq, context);
+                } else if text == "_" {
+                    let index = (context.rng.next_u64() % self.max_page as u64) as usize;
+                    self.go_to_page(index, hub, rq, context);
+                } else if let Ok(index) = text.parse::<usize>() {
+                    self.go_to_page(index.saturating_sub(1), hub, rq, context);
+                }
+                true
+            },
             Event::Gesture(GestureEvent::Swipe { dir, start, .. }) if self.rect.includes(start) => {
                 match dir {
                     Dir::West => {
@@ -265,6 +314,22 @@ impl View for WorkIndex {
                     },
                     _ => false,
                 }
+            },
+            Event::Page(dir) => {
+                self.go_to_neighbor(dir, hub, rq, context);
+                true
+            },
+            Event::GoTo(location) => {
+                self.go_to_page(location as usize, hub, rq, context);
+                true
+            },
+            Event::Device(DeviceEvent::Button { code: ButtonCode::Backward, status: ButtonStatus::Pressed, .. }) => {
+                self.go_to_neighbor(CycleDir::Previous, hub, rq, context);
+                true
+            },
+            Event::Device(DeviceEvent::Button { code: ButtonCode::Forward, status: ButtonStatus::Pressed, .. }) => {
+                self.go_to_neighbor(CycleDir::Next, hub, rq, context);
+                true
             },
             _ => false,
         }

@@ -1,6 +1,6 @@
 use regex::Regex;
 use scraper::Html;
-use crate::http::{scrape_many, scrape_outer, scrape, scrape_link, scrape_link_list, Link};
+use crate::http::{scrape_outer, scrape, scrape_link_list, scrape_inner_text, Link};
 use chrono::NaiveDate;
 use serde::{Serialize, Deserialize};
 use crate::helpers::date_format;
@@ -70,6 +70,7 @@ pub struct Ao3Info {
     pub bookmarks: usize,
     pub comments: usize,
     pub words: usize,
+    pub chapters: String,
     #[serde(with = "date_format")]
     pub updated: NaiveDate,
 }
@@ -84,6 +85,7 @@ impl Default for Ao3Info {
             req_tags: RequiredTags::default(),
             tags: vec![],
             summary: "No summary".to_string(),
+            chapters: "0/0".to_string(),
             kudos: 0,
             hits: 0,
             comments: 0,
@@ -114,12 +116,13 @@ impl Ao3Info {
         let fandoms = scrape_link_list(&html, ".fandoms a");
         let req_tags = RequiredTags::new(scrape_outer(&html, "ul.required-tags"));
         let tags = scrape_link_list(&html, "ul.tags a");
-        let summary = scrape(&html, "blockquote.summary");
+        let summary = scrape_inner_text(&html, "blockquote.summary");
         let words = str_to_usize(scrape(&html, "dd.words"));
         let comments = str_to_usize(scrape(&html, "dd.comments"));
         let kudos = str_to_usize(scrape(&html, "dd.kudos"));
         let hits = str_to_usize(scrape(&html, "dd.hits"));
         let bookmarks = str_to_usize(scrape(&html, "dd.bookmarks a"));
+        let chapters = scrape_inner_text(&html, "dd.chapters");
 
         Ao3Info{
             id,
@@ -134,7 +137,8 @@ impl Ao3Info {
             kudos,
             hits,
             bookmarks,
-            updated
+            updated,
+            chapters
         }
     }
 
@@ -158,8 +162,9 @@ impl Ao3Info {
         tags.extend(chars);
         tags.extend(addl_tags);
 
-        let summary = scrape(&header, ".summary blockquote");
+        let summary = scrape_inner_text(&header, ".summary blockquote");
         let words = str_to_usize(scrape(&html, "dd.words"));
+        let chapters = scrape_inner_text(&html, "dd.chapters");
         let comments = str_to_usize(scrape(&html, "dd.comments"));
         let kudos = str_to_usize(scrape(&html, "dd.kudos"));
         let hits = str_to_usize(scrape(&html, "dd.hits"));
@@ -178,7 +183,8 @@ impl Ao3Info {
             kudos,
             hits,
             bookmarks,
-            updated
+            updated,
+            chapters
         }
     }
 }

@@ -69,8 +69,8 @@ pub const BOLD_STYLE: Style = Style {
 
 pub const ABOUT_STYLE: Style = Style {
     family: Family::SansSerif,
-    variant: Variant::BOLD,
-    size: KEYBOARD_FONT_SIZES[1],
+    variant: Variant::REGULAR,
+    size: FONT_SIZES[1],
 };
 
 

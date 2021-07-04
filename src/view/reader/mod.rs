@@ -244,35 +244,30 @@ impl Reader {
 
         open(&path).and_then(|mut doc| {
             let (width, height) = context.display.dims;
-            let font_size = info.reader.as_ref().and_then(|r| r.font_size)
-                                .unwrap_or(settings.reader.font_size);
+            let font_size = settings.reader.font_size;
             let first_location = doc.resolve_location(Location::Exact(0))?;
 
             doc.layout(width, height, font_size, CURRENT_DEVICE.dpi);
 
-            let margin_width = info.reader.as_ref().and_then(|r| r.margin_width)
-                                   .unwrap_or(settings.reader.margin_width);
+            let margin_width = settings.reader.margin_width;
 
             if margin_width != DEFAULT_MARGIN_WIDTH {
                 doc.set_margin_width(margin_width);
             }
 
-            let font_family = info.reader.as_ref().and_then(|r| r.font_family.as_ref())
-                                  .unwrap_or(&settings.reader.font_family);
+            let font_family = &settings.reader.font_family;
 
             if font_family != DEFAULT_FONT_FAMILY {
                 doc.set_font_family(font_family, &settings.reader.font_path);
             }
 
-            let line_height = info.reader.as_ref().and_then(|r| r.line_height)
-                                  .unwrap_or(settings.reader.line_height);
+            let line_height = settings.reader.line_height;
 
             if (line_height - DEFAULT_LINE_HEIGHT).abs() > f32::EPSILON {
                 doc.set_line_height(line_height);
             }
 
-            let text_align = info.reader.as_ref().and_then(|r| r.text_align)
-                                 .unwrap_or(settings.reader.text_align);
+            let text_align = settings.reader.text_align;
 
             if text_align != DEFAULT_TEXT_ALIGN {
                 doc.set_text_align(text_align);
@@ -379,6 +374,11 @@ impl Reader {
         let mut doc = HtmlDocument::new_from_memory(html);
         let (width, height) = context.display.dims;
         let font_size = context.settings.reader.font_size;
+        doc.set_margin_width(context.settings.reader.margin_width);
+        doc.set_line_height(context.settings.reader.line_height);
+        doc.set_font_size(context.settings.reader.font_size);
+        doc.set_text_align(context.settings.reader.text_align);
+    
         doc.layout(width, height, font_size, CURRENT_DEVICE.dpi);
         let pages_count = doc.pages_count();
         info.title = doc.title().unwrap_or_default();
@@ -443,6 +443,12 @@ impl Reader {
         let mut doc = Ao3Document::new_from_memory(html, link_uri);
         let (width, height) = context.display.dims;
         let font_size = context.settings.reader.font_size;
+
+        doc.set_margin_width(context.settings.reader.margin_width);
+        doc.set_line_height(context.settings.reader.line_height);
+        doc.set_font_size(context.settings.reader.font_size);
+        doc.set_text_align(context.settings.reader.text_align);
+        
         doc.layout(width, height, font_size, CURRENT_DEVICE.dpi);
         let pages_count = doc.pages_count();
         info.title = doc.title().unwrap_or_default();
@@ -1828,9 +1834,7 @@ impl Reader {
             let mut families = family_names(&context.settings.reader.font_path)
                                            .map_err(|e| eprintln!("Can't get family names: {}", e))
                                            .unwrap_or_default();
-            let current_family = self.info.reader.as_ref()
-                                     .and_then(|r| r.font_family.clone())
-                                     .unwrap_or_else(|| context.settings.reader.font_family.clone());
+            let current_family = context.settings.reader.font_family.clone();
             families.insert(DEFAULT_FONT_FAMILY.to_string());
             let entries = families.iter().map(|f| EntryKind::RadioButton(f.clone(),
                                                                          EntryId::SetFontFamily(f.clone()),
@@ -1854,8 +1858,7 @@ impl Reader {
                 return;
             }
 
-            let font_size = self.info.reader.as_ref().and_then(|r| r.font_size)
-                                .unwrap_or(context.settings.reader.font_size);
+            let font_size = context.settings.reader.font_size;
             let min_font_size = context.settings.reader.font_size / 2.0;
             let max_font_size = 3.0 * context.settings.reader.font_size / 2.0;
             let entries = (0..=20).filter_map(|v| {
@@ -1887,8 +1890,7 @@ impl Reader {
                 return;
             }
 
-            let text_align = self.info.reader.as_ref().and_then(|r| r.text_align)
-                                .unwrap_or(context.settings.reader.text_align);
+            let text_align = context.settings.reader.text_align;
             let choices = [TextAlign::Justify, TextAlign::Left, TextAlign::Right, TextAlign::Center];
             let entries = choices.iter().map(|v| {
                 EntryKind::RadioButton(v.to_string(),
@@ -1914,8 +1916,7 @@ impl Reader {
                 return;
             }
 
-            let line_height = self.info.reader.as_ref()
-                                  .and_then(|r| r.line_height).unwrap_or(context.settings.reader.line_height);
+            let line_height = context.settings.reader.line_height;
             let entries = (0..=10).map(|x| {
                 let lh = 1.0 + x as f32 / 10.0;
                 EntryKind::RadioButton(format!("{:.1}", lh),
@@ -1992,9 +1993,7 @@ impl Reader {
             }
 
             let reflowable = self.reflowable;
-            let margin_width = self.info.reader.as_ref()
-                                   .and_then(|r| if reflowable { r.margin_width } else { r.screen_margin_width })
-                                   .unwrap_or_else(|| if reflowable { context.settings.reader.margin_width } else { 0 });
+            let margin_width = context.settings.reader.margin_width;
             let entries = (0..=10).map(|mw| EntryKind::RadioButton(format!("{}", mw),
                                                                   EntryId::SetMarginWidth(mw),
                                                                   mw == margin_width)).collect();
@@ -2110,9 +2109,7 @@ impl Reader {
             return;
         }
 
-        if let Some(ref mut r) = self.info.reader {
-            r.font_size = Some(font_size);
-        }
+        context.settings.reader.font_size = font_size;
 
         let (width, height) = context.display.dims;
         {
@@ -2144,9 +2141,7 @@ impl Reader {
             return;
         }
 
-        if let Some(ref mut r) = self.info.reader {
-            r.text_align = Some(text_align);
-        }
+        context.settings.reader.text_align = text_align;
 
         {
             let mut doc = self.doc.lock().unwrap();
@@ -2174,10 +2169,8 @@ impl Reader {
         if Arc::strong_count(&self.doc) > 1 {
             return;
         }
-
-        if let Some(ref mut r) = self.info.reader {
-            r.font_family = Some(font_family.to_string());
-        }
+        
+        context.settings.reader.font_family = font_family.to_string();
 
         {
             let mut doc = self.doc.lock().unwrap();
@@ -2211,10 +2204,7 @@ impl Reader {
         if Arc::strong_count(&self.doc) > 1 {
             return;
         }
-
-        if let Some(ref mut r) = self.info.reader {
-            r.line_height = Some(line_height);
-        }
+        context.settings.reader.line_height = line_height;
 
         {
             let mut doc = self.doc.lock().unwrap();
@@ -2243,17 +2233,7 @@ impl Reader {
             return;
         }
 
-        if let Some(ref mut r) = self.info.reader {
-            if self.reflowable {
-                r.margin_width = Some(width);
-            } else {
-                if width == 0 {
-                    r.screen_margin_width = None;
-                } else {
-                    r.screen_margin_width = Some(width);
-                }
-            }
-        }
+        context.settings.reader.margin_width = width;
 
         if self.reflowable {
             let mut doc = self.doc.lock().unwrap();
@@ -3772,9 +3752,7 @@ impl View for Reader {
                 true
             },
             Event::Select(EntryId::SetFontSize(v)) => {
-                let font_size = self.info.reader.as_ref()
-                                    .and_then(|r| r.font_size)
-                                    .unwrap_or(context.settings.reader.font_size);
+                let font_size = context.settings.reader.font_size;
                 let font_size = font_size - 1.0 + v as f32 / 10.0;
                 self.set_font_size(font_size, hub, rq, context);
                 true
@@ -4084,9 +4062,7 @@ impl View for Reader {
         self.rect = rect;
 
         if self.reflowable {
-            let font_size = self.info.reader.as_ref()
-                                .and_then(|r| r.font_size)
-                                .unwrap_or(context.settings.reader.font_size);
+            let font_size = context.settings.reader.font_size;
             let mut doc = self.doc.lock().unwrap();
             doc.layout(rect.width(), rect.height(), font_size, CURRENT_DEVICE.dpi);
             let current_page = self.current_page.min(doc.pages_count() - 1);

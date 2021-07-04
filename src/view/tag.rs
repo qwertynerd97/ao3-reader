@@ -4,7 +4,6 @@ use super::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData};
 use crate::gesture::GestureEvent;
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::geom::{Rectangle, Point};
-use crate::document::Location;
 use crate::color::{TEXT_BUMP_SMALL, TEXT_INVERTED_SOFT};
 use crate::app::Context;
 
@@ -13,10 +12,10 @@ pub struct Tag {
     id: Id,
     active: bool,
     rect: Rectangle,
-    rects: Vec<Rectangle>,
+    pub rects: Vec<Rectangle>,
     children: Vec<Box<dyn View>>,
     elements: Vec<(RenderPlan, Point)>,
-    loc: Option<String>,
+    pub loc: Option<String>,
     style: Style,
     has_loc: bool
 }
@@ -34,7 +33,6 @@ impl Tag {
 
         let mut plan = font.plan(&text, None, None);
         let mut lines = 1;
-        let max_lines = 5;
 
         let line_height = font.line_height();
         let line_diff = (height - line_height) / 3;
@@ -46,7 +44,7 @@ impl Tag {
             has_loc = true;
         }
 
-        while lines < max_lines {
+        loop {
             if plan.width > width {
                 let (index, usable_width) = font.cut_point(&plan, width);
                 let temp_plan = plan.split_off(index, usable_width);
@@ -109,12 +107,12 @@ impl Tag {
 
     pub fn shift_vertical(&mut self, offset: i32) {
         for rect in &mut self.rects {
-            rect.min.y =- offset;
-            rect.max.y =- offset;
+            rect.min.y -= offset;
+            rect.max.y -= offset;
         }
 
         for el in &mut self.elements {
-            el.1.y =- offset;
+            el.1.y -= offset;
         }
 
     }
@@ -131,7 +129,15 @@ impl Tag {
 
     }
 
-    pub fn split(&mut self, line: usize) -> Tag {
+    pub fn split(&mut self, height: i32) -> Tag {
+        let mut line = 0;
+        for rect in &self.rects {
+            if rect.max.y > height {
+                break;
+            }
+            line += 1;
+        }
+
         let rects = self.rects.split_off(line);
         let elements = self.elements.split_off(line);
         Tag {
@@ -163,6 +169,7 @@ impl View for Tag {
     }
 
     fn render(&self, fb: &mut dyn Framebuffer, _rect: Rectangle, fonts: &mut Fonts) {
+        println!("rendering {:?}", self.loc);
         let scheme = if self.active {
             TEXT_INVERTED_SOFT
         } else {

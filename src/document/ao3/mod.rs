@@ -85,7 +85,7 @@ impl Ao3Document {
         let document = scraper::Html::parse_document(&text);
         let body_selector = scraper::Selector::parse("#workskin").unwrap();
         let body_text = document.select(&body_selector).next().unwrap().inner_html();
-        let size = text.len();
+        let size = body_text.len();
         let mut content = XmlParser::new(&body_text).parse();
         content.wrap_lost_inlines();
 
@@ -124,8 +124,10 @@ impl Ao3Document {
     // }
     pub fn update(&mut self, text: &str) {
         self.parsed_doc = scraper::Html::parse_document(&text);
-        self.size = text.len();
-        self.content = XmlParser::new(text).parse();
+        let body_selector = scraper::Selector::parse("#workskin").unwrap();
+        let body_text = self.parsed_doc.select(&body_selector).next().unwrap().inner_html();
+        self.size = body_text.len();
+        self.content = XmlParser::new(&body_text).parse();
         self.content.wrap_lost_inlines();
         self.text = text.to_string();
         self.pages.clear();
@@ -640,9 +642,8 @@ impl Document for Ao3Document {
     }
 
     fn title(&self) -> Option<String> {
-        let title_selector = scraper::Selector::parse("h2.title").unwrap();
-        let title_text = self.parsed_doc.select(&title_selector).next().unwrap().inner_html();
-        Some(title_text.trim().to_string())
+        let title = scrape(&self.parsed_doc,"h2.title");
+        Some(title)
     }
 
     fn author(&self) -> Option<String> {
