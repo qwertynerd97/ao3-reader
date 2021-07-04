@@ -86,7 +86,7 @@ impl HtmlDocument {
             content,
             engine: Engine::new(),
             pages: Vec::new(),
-            parent: PathBuf::from(""),
+            parent: PathBuf::default(),
             size,
             viewer_stylesheet: PathBuf::from(VIEWER_STYLESHEET),
             user_stylesheet: PathBuf::from(USER_STYLESHEET),
@@ -179,7 +179,7 @@ impl HtmlDocument {
 
     fn build_pages(&mut self) -> Vec<Page> {
         let mut stylesheet = Vec::new();
-        let spine_dir = PathBuf::from("");
+        let spine_dir = PathBuf::default();
 
         if let Ok(text) = fs::read_to_string(&self.viewer_stylesheet) {
             let (mut css, _) = CssParser::new(&text).parse(RuleKind::Viewer);
@@ -408,6 +408,16 @@ impl Document for HtmlDocument {
 
     fn set_line_height(&mut self, line_height: f32) {
         self.engine.set_line_height(line_height);
+        self.pages.clear();
+    }
+
+    fn set_hyphen_penalty(&mut self, hyphen_penalty: i32) {
+        self.engine.set_hyphen_penalty(hyphen_penalty);
+        self.pages.clear();
+    }
+
+    fn set_stretch_tolerance(&mut self, stretch_tolerance: f32) {
+        self.engine.set_stretch_tolerance(stretch_tolerance);
         self.pages.clear();
     }
 

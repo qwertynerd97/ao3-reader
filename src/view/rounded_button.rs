@@ -26,7 +26,7 @@ impl RoundedButton {
         RoundedButton {
             id: ID_FEEDER.next(),
             rect,
-            children: vec![],
+            children: Vec::new(),
             name: name.to_string(),
             event,
             active: false,

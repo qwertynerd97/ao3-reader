@@ -37,6 +37,12 @@ pub const NORMAL_STYLE: Style = Style {
     size: FONT_SIZES[1],
 };
 
+pub const SPECIAL_STYLE: Style = Style {
+    family: Family::SansSerif,
+    variant: Variant::ITALIC,
+    size: FONT_SIZES[1],
+};
+
 pub const KBD_CHAR: Style = Style {
     family: Family::Keyboard,
     variant: Variant::REGULAR,
@@ -434,7 +440,7 @@ pub struct FontFamily {
 
 pub fn family_names<P: AsRef<Path>>(search_path: P) -> Result<BTreeSet<String>, Error> {
     if !search_path.as_ref().exists() {
-        return Err(format_err!("The search path doesn't exist."));
+        return Err(format_err!("the search path doesn't exist"));
     }
 
     let opener = FontOpener::new()?;
@@ -452,7 +458,7 @@ pub fn family_names<P: AsRef<Path>>(search_path: P) -> Result<BTreeSet<String>, 
         if !glob.is_match(path) {
             continue;
         }
-        if let Ok(font) = opener.open(path).map_err(|e| eprintln!("Can't open '{}': {}", path.display(), e)) {
+        if let Ok(font) = opener.open(path).map_err(|e| eprintln!("Can't open '{}': {:#}.", path.display(), e)) {
             if let Some(family_name) = font.family_name() {
                 families.insert(family_name.to_string());
             } else {
@@ -480,7 +486,7 @@ impl FontFamily {
             if !glob.is_match(path) {
                 continue;
             }
-            if let Ok(font) = opener.open(path).map_err(|e| eprintln!("Can't open '{}': {}", path.display(), e)) {
+            if let Ok(font) = opener.open(path).map_err(|e| eprintln!("Can't open '{}': {:#}.", path.display(), e)) {
                 if font.family_name() == Some(family_name) {
                     styles.insert(font.style_name().map(String::from)
                                       .unwrap_or_else(|| "Regular".to_string()),
@@ -495,7 +501,7 @@ impl FontFamily {
             styles.get("Regular")
                   .or_else(|| styles.get("Roman"))
                   .or_else(|| styles.get("Book"))
-                  .ok_or_else(|| format_err!("Can't find regular style."))?
+                  .ok_or_else(|| format_err!("can't find regular style"))?
         };
         let italic_path = styles.get("Italic")
                                 .or_else(|| styles.get("Book Italic"))
@@ -1533,8 +1539,7 @@ impl Font {
                 pos += glyph.advance;
             }
 
-            let fallback_faces: BTreeSet<*mut FtFace> = fallback_faces.into_iter().map(|(_, v)| v).collect();
-            for face in fallback_faces.into_iter() {
+            for (_, face) in fallback_faces {
                 FT_Done_Face(face);
             }
         }
@@ -1593,7 +1598,7 @@ impl Default for RenderPlan {
         RenderPlan {
             width: 0,
             scripts: FxHashMap::default(),
-            glyphs: vec![],
+            glyphs: Vec::new(),
         }
     }
 }

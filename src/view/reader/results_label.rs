@@ -20,7 +20,7 @@ impl ResultsLabel {
         ResultsLabel {
             id: ID_FEEDER.next(),
             rect,
-            children: vec![],
+            children: Vec::new(),
             count,
             completed,
         }

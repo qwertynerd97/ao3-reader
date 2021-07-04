@@ -34,14 +34,13 @@ use crate::view::menu::{Menu, MenuKind};
 use crate::view::menu_entry::MenuEntry;
 use crate::view::search_bar::SearchBar;
 use crate::view::notification::Notification;
-use crate::view::intermission::IntermKind;
 use super::top_bar::TopBar;
 use self::address_bar::AddressBar;
 use self::navigation_bar::NavigationBar;
 use self::shelf::Shelf;
 use self::bottom_bar::BottomBar;
 use crate::gesture::GestureEvent;
-use crate::geom::{Rectangle, Dir, CycleDir, halves};
+use crate::geom::{Rectangle, Dir, DiagDir, CycleDir, halves};
 use crate::input::{DeviceEvent, ButtonCode, ButtonStatus};
 use crate::device::CURRENT_DEVICE;
 use crate::unit::scale_by_dpi;
@@ -65,6 +64,7 @@ pub struct Home {
     reverse_order: bool,
     visible_books: Metadata,
     current_directory: PathBuf,
+    target_document: Option<PathBuf>,
     background_fetchers: FxHashMap<u32, Fetcher>,
 }
 
@@ -220,6 +220,7 @@ impl Home {
             reverse_order,
             visible_books,
             current_directory,
+            target_document: None,
             background_fetchers: FxHashMap::default(),
         })
     }
@@ -310,6 +311,36 @@ impl Home {
         self.update_bottom_bar(rq, context);
     }
 
+    fn go_to_status_change(&mut self, dir: CycleDir, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+        if self.pages_count < 2 {
+            return;
+        }
+
+        let max_lines = self.children[self.shelf_index].as_ref().downcast_ref::<Shelf>().unwrap().max_lines;
+        let index_lower = self.current_page * max_lines;
+        let index_upper = (index_lower + max_lines).min(self.visible_books.len());
+        let book_index = match dir {
+            CycleDir::Next => index_upper.saturating_sub(1),
+            CycleDir::Previous => index_lower,
+        };
+        let status = self.visible_books[book_index].simple_status();
+
+        let page = match dir {
+            CycleDir::Next => self.visible_books[book_index+1..].iter()
+                                  .position(|info| info.simple_status() != status)
+                                  .map(|delta| self.current_page + 1 + delta / max_lines),
+            CycleDir::Previous => self.visible_books[..book_index].iter().rev()
+                                      .position(|info| info.simple_status() != status)
+                                      .map(|delta| self.current_page - 1 - delta / max_lines),
+        };
+
+        if let Some(page) = page {
+            self.current_page = page;
+            self.update_shelf(false, hub, rq, context);
+            self.update_bottom_bar(rq, context);
+        }
+    }
+
     // NOTE: This function assumes that the shelf wasn't resized.
     fn refresh_visibles(&mut self, update: bool, reset_page: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
         let (files, _) = context.library.list(&self.current_directory,
@@ -375,7 +406,7 @@ impl Home {
             let mut page_guess = page_position * self.visible_books.len() as f32 / max_lines as f32;
             let page_ceil = page_guess.ceil();
 
-            if (page_ceil - page_guess) < f32::EPSILON {
+            if (page_ceil - page_guess).abs() < f32::EPSILON {
                 page_guess = page_ceil;
             }
 
@@ -456,11 +487,7 @@ impl Home {
                                     self.rect.max.x,
                                     self.rect.max.y - small_height - small_thickness];
 
-            let number = match id {
-                Some(ViewId::GoToPageInput) => true,
-                _ => false,
-            };
-
+            let number = matches!(id, Some(ViewId::GoToPageInput));
             let keyboard = Keyboard::new(&mut kb_rect, number, context);
             self.children.insert(index, Box::new(keyboard) as Box<dyn View>);
 
@@ -757,6 +784,36 @@ impl Home {
         }
     }
 
+    fn toggle_rename_document(&mut self, enable: Option<bool>, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+        if let Some(index) = locate_by_id(self, ViewId::RenameDocument) {
+            if let Some(true) = enable {
+                return;
+            }
+            self.target_document = None;
+            rq.add(RenderData::expose(*self.child(index).rect(), UpdateMode::Gui));
+            self.children.remove(index);
+            if let Some(ViewId::RenameDocumentInput) = self.focus {
+                self.toggle_keyboard(false, true, Some(ViewId::RenameDocumentInput), hub, rq, context);
+            }
+        } else {
+            if let Some(false) = enable {
+                return;
+            }
+            let mut ren_doc = NamedInput::new("Rename document".to_string(),
+                                              ViewId::RenameDocument,
+                                              ViewId::RenameDocumentInput,
+                                              21, context);
+            if let Some(text) = self.target_document.as_ref()
+                                    .and_then(|path| path.file_name())
+                                    .and_then(|file_name| file_name.to_str()) {
+                ren_doc.set_text(text, rq, context);
+            }
+            rq.add(RenderData::new(ren_doc.id(), *ren_doc.rect(), UpdateMode::Gui));
+            hub.send(Event::Focus(Some(ViewId::RenameDocumentInput))).ok();
+            self.children.push(Box::new(ren_doc) as Box<dyn View>);
+        }
+    }
+
     fn toggle_go_to_page(&mut self, enable: Option<bool>, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
         if let Some(index) = locate_by_id(self, ViewId::GoToPage) {
             if let Some(true) = enable {
@@ -801,6 +858,9 @@ impl Home {
                                EntryKind::RadioButton("Date Added".to_string(),
                                                       EntryId::Sort(SortMethod::Added),
                                                       self.sort_method == SortMethod::Added),
+                               EntryKind::RadioButton("Status".to_string(),
+                                                      EntryId::Sort(SortMethod::Status),
+                                                      self.sort_method == SortMethod::Status),
                                EntryKind::RadioButton("Progress".to_string(),
                                                       EntryId::Sort(SortMethod::Progress),
                                                       self.sort_method == SortMethod::Progress),
@@ -855,7 +915,6 @@ impl Home {
             let book_index = self.book_index(index);
             let info = &self.visible_books[book_index];
             let path = &info.file.path;
-            let full_path = context.library.home.join(path);
 
             let mut entries = Vec::new();
 
@@ -883,34 +942,28 @@ impl Home {
                                                                     EntryId::SetStatus(path.clone(), *s)))
                                  .collect();
             entries.push(EntryKind::SubMenu("Mark As".to_string(), submenu));
-
-            {
-                let images = &context.settings.intermission_images;
-                let submenu = [IntermKind::Suspend,
-                               IntermKind::PowerOff,
-                               IntermKind::Share].iter().map(|k| {
-                                   EntryKind::CheckBox(k.label().to_string(),
-                                                       EntryId::ToggleIntermissionImage(*k, path.clone()),
-                                                       images.get(k.key()) == Some(&full_path))
-                               }).collect::<Vec<EntryKind>>();
-
-
-                entries.push(EntryKind::SubMenu("Set As".to_string(), submenu))
-            }
-
             entries.push(EntryKind::Separator);
+
             let selected_library = context.settings.selected_library;
             let libraries = context.settings.libraries.iter().enumerate()
                                    .filter(|(index, _)| *index != selected_library)
-                                   .map(|(index, lib)|  {
-                                       EntryKind::Command(lib.name.clone(),
-                                                          EntryId::MoveTo(path.clone(), index))
-                                   }).collect::<Vec<EntryKind>>();
+                                   .map(|(index, lib)| (index, lib.name.clone()))
+                                   .collect::<Vec<(usize, String)>>();
             if !libraries.is_empty() {
-                entries.push(EntryKind::SubMenu("Move To".to_string(), libraries));
-
+                let copy_to = libraries.iter().map(|(index, name)| {
+                    EntryKind::Command(name.clone(),
+                                       EntryId::CopyTo(path.clone(), *index))
+                }).collect::<Vec<EntryKind>>();
+                let move_to = libraries.iter().map(|(index, name)| {
+                    EntryKind::Command(name.clone(),
+                                       EntryId::MoveTo(path.clone(), *index))
+                }).collect::<Vec<EntryKind>>();
+                entries.push(EntryKind::SubMenu("Copy To".to_string(), copy_to));
+                entries.push(EntryKind::SubMenu("Move To".to_string(), move_to));
             }
 
+            entries.push(EntryKind::Command("Rename".to_string(),
+                                            EntryId::Rename(path.clone())));
             entries.push(EntryKind::Command("Remove".to_string(),
                                             EntryId::Remove(path.clone())));
 
@@ -943,7 +996,6 @@ impl Home {
 
             let database = if library_settings.mode == LibraryMode::Database {
                 vec![EntryKind::Command("Import".to_string(), EntryId::Import),
-                     EntryKind::Command("Clean Up".to_string(), EntryId::CleanUp),
                      EntryKind::Command("Flush".to_string(), EntryId::Flush)]
             } else {
                 Vec::new()
@@ -992,57 +1044,104 @@ impl Home {
             entries.push(EntryKind::CheckBox("Thumbnail Previews".to_string(),
                                              EntryId::ThumbnailPreviews,
                                              library_settings.thumbnail_previews));
+
+            let trash_path = context.library.home.join(TRASH_DIRNAME);
+            if trash_path.is_dir() {
+                let trash = Library::new(trash_path, LibraryMode::Database);
+                if trash.is_empty() == Some(false) {
+                    entries.push(EntryKind::Separator);
+                    entries.push(EntryKind::Command("Empty Trash".to_string(),
+                                                    EntryId::EmptyTrash));
+                }
+            }
+
             let library_menu = Menu::new(rect, ViewId::LibraryMenu, MenuKind::DropDown, entries, context);
             rq.add(RenderData::new(library_menu.id(), *library_menu.rect(), UpdateMode::Gui));
             self.children.push(Box::new(library_menu) as Box<dyn View>);
         }
     }
 
-    fn add_document(&mut self, mut info: Info, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        if let Ok(path) = info.file.path.strip_prefix(&context.library.home) {
-            info.file.path = path.to_path_buf();
-            context.library.add_document(info);
-            self.sort(false, hub, rq, context);
-            self.refresh_visibles(true, false, hub, rq, context);
-        }
+    fn add_document(&mut self, info: Info, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+        context.library.add_document(info);
+        self.sort(false, hub, rq, context);
+        self.refresh_visibles(true, false, hub, rq, context);
     }
 
     fn set_status(&mut self, path: &Path, status: SimpleStatus, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
         context.library.set_status(path, status);
 
         // Is the current sort method affected by this change?
-        if self.sort_method == SortMethod::Progress ||
-           self.sort_method == SortMethod::Opened {
+        if self.sort_method.is_status_related() {
             self.sort(false, hub, rq, context);
         }
 
         self.refresh_visibles(true, false, hub, rq, context);
     }
 
-    fn remove(&mut self, path: &Path, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) -> Result<(), Error> {
+    fn empty_trash(&mut self, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
         let trash_path = context.library.home.join(TRASH_DIRNAME);
         if !trash_path.is_dir() {
-            fs::create_dir_all(&trash_path)?;
+            return;
         }
         let mut trash = Library::new(trash_path, LibraryMode::Database);
-        context.library.move_to(path, &mut trash)?;
-        let full_path = context.library.home.join(path);
-        context.settings.intermission_images.retain(|_, path| path != &full_path);
-        let (mut files, _) = trash.list(&trash.home, None, false);
-        let mut size = files.iter().map(|info| info.file.size).sum::<u64>();
-        if size > context.settings.home.max_trash_size {
-            sort(&mut files, SortMethod::Added, true);
-            while size > context.settings.home.max_trash_size {
-                let info = files.pop().unwrap();
-                if let Err(e) = trash.remove(&info.file.path) {
-                    eprintln!("{}", e);
-                    break;
-                }
-                size -= info.file.size;
+        let (files, _) = trash.list(&trash.home, None, false);
+        if files.is_empty() {
+            return;
+        }
+        let mut count = 0;
+        for info in files {
+            match trash.remove(&info.file.path) {
+                Err(e) => eprintln!("Can't erase {}: {:#}.", info.file.path.display(), e),
+                Ok(()) => count += 1,
             }
         }
         trash.flush();
+        let message = format!("Removed {} book{}.", count, if count != 1 { "s" } else { "" });
+        let notif = Notification::new(message, hub, rq, context);
+        self.children.push(Box::new(notif) as Box<dyn View>);
+    }
+
+    fn rename(&mut self, path: &Path, file_name: &str, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) -> Result<(), Error> {
+        context.library.rename(path, file_name)?;
         self.refresh_visibles(true, false, hub, rq, context);
+        Ok(())
+    }
+
+    fn remove(&mut self, path: &Path, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) -> Result<(), Error> {
+        let full_path = context.library.home.join(path);
+        if full_path.exists() {
+            let trash_path = context.library.home.join(TRASH_DIRNAME);
+            if !trash_path.is_dir() {
+                fs::create_dir_all(&trash_path)?;
+            }
+            let mut trash = Library::new(trash_path, LibraryMode::Database);
+            context.library.move_to(path, &mut trash)?;
+            let (mut files, _) = trash.list(&trash.home, None, false);
+            let mut size = files.iter().map(|info| info.file.size).sum::<u64>();
+            if size > context.settings.home.max_trash_size {
+                sort(&mut files, SortMethod::Added, true);
+                while size > context.settings.home.max_trash_size {
+                    let info = files.pop().unwrap();
+                    if let Err(e) = trash.remove(&info.file.path) {
+                        eprintln!("Can't erase {}: {:#}", info.file.path.display(), e);
+                        break;
+                    }
+                    size -= info.file.size;
+                }
+            }
+            trash.flush();
+        } else {
+            context.library.remove(path)?;
+        }
+        self.refresh_visibles(true, false, hub, rq, context);
+        Ok(())
+    }
+
+    fn copy_to(&mut self, path: &Path, index: usize, context: &mut Context) -> Result<(), Error> {
+        let library_settings = &context.settings.libraries[index];
+        let mut library = Library::new(&library_settings.path, library_settings.mode);
+        context.library.copy_to(path, &mut library)?;
+        library.flush();
         Ok(())
     }
 
@@ -1093,7 +1192,7 @@ impl Home {
             return;
         }
 
-        let old_path = mem::replace(&mut self.current_directory, PathBuf::default());
+        let old_path = mem::take(&mut self.current_directory);
         self.terminate_fetchers(&old_path, false, hub, context);
 
         let mut update_top_bar = false;
@@ -1136,9 +1235,7 @@ impl Home {
     }
 
     fn import(&mut self, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        let home = context.library.home.clone();
-        let settings = context.settings.import.clone();
-        context.library.import(&home, &settings);
+        context.library.import(&context.settings.import);
         context.library.sort(self.sort_method, self.reverse_order);
         self.refresh_visibles(true, false, hub, rq, context);
     }
@@ -1169,6 +1266,9 @@ impl Home {
                     }
                 } else {
                     let selected_library = context.settings.selected_library;
+                    if let Some(sort_method) = fetcher.sort_method {
+                        context.settings.libraries[selected_library].sort_method = sort_method;
+                    }
                     if let Some(first_column) = fetcher.first_column {
                         context.settings.libraries[selected_library].first_column = first_column;
                     }
@@ -1184,8 +1284,9 @@ impl Home {
     }
 
     fn insert_fetcher(&mut self, hook: &Hook, hub: &Hub, context: &Context) {
-        let dir = context.library.home.join(&hook.path);
-        match self.spawn_child(&dir, &hook.program, context.settings.wifi, context.online, hub) {
+        let library_path = &context.library.home;
+        let save_path = context.library.home.join(&hook.path);
+        match self.spawn_child(library_path, &save_path, &hook.program, context.settings.wifi, context.online, hub) {
             Ok(process) => {
                 let mut sort_method = hook.sort_method;
                 let mut first_column = hook.first_column;
@@ -1201,27 +1302,28 @@ impl Home {
                     hub.send(Event::Select(EntryId::SecondColumn(second_column))).ok();
                 }
                 self.background_fetchers.insert(process.id(),
-                                                Fetcher { path: hook.path.clone(), full_path: dir, process,
+                                                Fetcher { path: hook.path.clone(), full_path: save_path, process,
                                                           sort_method, first_column, second_column });
             },
-            Err(e) => eprintln!("Can't spawn child: {}.", e),
+            Err(e) => eprintln!("Can't spawn child: {:#}.", e),
         }
     }
 
-    fn spawn_child(&mut self, dir: &Path, program: &PathBuf, wifi: bool, online: bool, hub: &Hub) -> Result<Child, Error> {
+    fn spawn_child(&mut self, library_path: &Path, save_path: &Path, program: &Path, wifi: bool, online: bool, hub: &Hub) -> Result<Child, Error> {
         let path = program.canonicalize()?;
         let parent = path.parent()
                          .unwrap_or_else(|| Path::new(""));
         let mut process = Command::new(&path)
                                  .current_dir(parent)
-                                 .arg(dir)
+                                 .arg(library_path)
+                                 .arg(save_path)
                                  .arg(wifi.to_string())
                                  .arg(online.to_string())
                                  .stdin(Stdio::piped())
                                  .stdout(Stdio::piped())
                                  .spawn()?;
         let stdout = process.stdout.take()
-                            .ok_or_else(|| format_err!("Can't take stdout."))?;
+                            .ok_or_else(|| format_err!("can't take stdout"))?;
         let id = process.id();
         let hub2 = hub.clone();
         thread::spawn(move || {
@@ -1250,6 +1352,12 @@ impl Home {
                                     hub2.send(Event::FetcherAddDocument(id, Box::new(info))).ok();
                                 }
                             },
+                            Some("removeDocument") => {
+                                if let Some(path) = event.get("path")
+                                                         .and_then(JsonValue::as_str) {
+                                    hub2.send(Event::FetcherRemoveDocument(id, PathBuf::from(path))).ok();
+                                }
+                            },
                             Some("search") => {
                                 let path = event.get("path")
                                                 .and_then(JsonValue::as_str)
@@ -1261,12 +1369,6 @@ impl Home {
                                                    .map(ToString::to_string)
                                                    .and_then(|v| serde_json::from_str(&v).ok());
                                 hub2.send(Event::FetcherSearch { id, path, query, sort_by }).ok();
-                            },
-                            Some("cleanUp") => {
-                                hub2.send(Event::FetcherCleanUp(id)).ok();
-                            },
-                            Some("import") => {
-                                hub2.send(Event::FetcherImport(id)).ok();
                             },
                             _ => (),
                         }
@@ -1340,6 +1442,15 @@ impl View for Home {
                 };
                 true
             },
+            Event::Gesture(GestureEvent::Corner { dir, .. }) => {
+                match dir {
+                    DiagDir::NorthWest |
+                    DiagDir::SouthWest => self.go_to_status_change(CycleDir::Previous, hub, rq, context),
+                    DiagDir::NorthEast |
+                    DiagDir::SouthEast => self.go_to_status_change(CycleDir::Next, hub, rq, context),
+                };
+                true
+            },
             Event::Focus(v) => {
                 if self.focus != v {
                     self.focus = v;
@@ -1409,7 +1520,13 @@ impl View for Home {
                 self.toggle_go_to_page(Some(false), hub, rq, context);
                 true
             },
+            Event::Close(ViewId::RenameDocument) => {
+                self.toggle_rename_document(Some(false), hub, rq, context);
+                true
+            },
             Event::Select(EntryId::Sort(sort_method)) => {
+                let selected_library = context.settings.selected_library;
+                context.settings.libraries[selected_library].sort_method = sort_method;
                 self.set_sort_method(sort_method, hub, rq, context);
                 true
             },
@@ -1422,11 +1539,11 @@ impl View for Home {
                 self.load_library(index, hub, rq, context);
                 true
             },
-            Event::Select(EntryId::Import) | Event::FetcherImport(_) => {
+            Event::Select(EntryId::Import) => {
                 self.import(hub, rq, context);
                 true
             },
-            Event::Select(EntryId::CleanUp) | Event::FetcherCleanUp(_) => {
+            Event::Select(EntryId::CleanUp) => {
                 self.clean_up(hub, rq, context);
                 true
             },
@@ -1435,8 +1552,7 @@ impl View for Home {
                 true
             },
             Event::FetcherAddDocument(_, ref info) => {
-                let info2 = info.clone();
-                self.add_document(*info2, hub, rq, context);
+                self.add_document(*info.clone(), hub, rq, context);
                 true
             },
             Event::Select(EntryId::SetStatus(ref path, status)) => {
@@ -1476,15 +1592,13 @@ impl View for Home {
                     }
                     self.refresh_visibles(true, true, hub, rq, context);
                 } else {
-                    let notif = Notification::new(ViewId::InvalidSearchQueryNotif,
-                                                  "Invalid search query.".to_string(),
-                                                  hub,
-                                                  rq,
-                                                  context);
+                    let notif = Notification::new("Invalid search query.".to_string(),
+                                                  hub, rq, context);
                     self.children.push(Box::new(notif) as Box<dyn View>);
                 }
                 true
             },
+<<<<<<< HEAD:src/view/home_bk/mod.rs
             // Event::Submit(ViewId::GoToPageInput, ref text) => {
             //     if text == "(" {
             //         self.go_to_page(0, hub, rq, context);
@@ -1498,6 +1612,29 @@ impl View for Home {
             //     }
             //     true
             // },
+=======
+            Event::Submit(ViewId::GoToPageInput, ref text) => {
+                if text == "(" {
+                    self.go_to_page(0, hub, rq, context);
+                } else if text == ")" {
+                    self.go_to_page(self.pages_count.saturating_sub(1), hub, rq, context);
+                } else if text == "_" {
+                    let index = (context.rng.next_u64() % self.pages_count as u64) as usize;
+                    self.go_to_page(index, hub, rq, context);
+                } else if let Ok(index) = text.parse::<usize>() {
+                    self.go_to_page(index.saturating_sub(1), hub, rq, context);
+                }
+                true
+            },
+            Event::Submit(ViewId::RenameDocumentInput, ref file_name) => {
+                if let Some(ref path) = self.target_document.take() {
+                    self.rename(path, file_name, hub, rq, context)
+                        .map_err(|e| eprintln!("Can't rename document: {:#}.", e))
+                        .ok();
+                }
+                true
+            },
+>>>>>>> upstream-master:src/view/home/mod.rs
             Event::NavigationBarResized(_) => {
                 self.adjust_shelf_top_edge();
                 self.update_shelf(true, hub, rq, context);
@@ -1507,15 +1644,30 @@ impl View for Home {
                 }
                 true
             },
-            Event::Select(EntryId::Remove(ref path)) => {
+            Event::Select(EntryId::EmptyTrash) => {
+                self.empty_trash(hub, rq, context);
+                true
+            },
+            Event::Select(EntryId::Rename(ref path)) => {
+                self.target_document = Some(path.clone());
+                self.toggle_rename_document(Some(true), hub, rq, context);
+                true
+            },
+            Event::Select(EntryId::Remove(ref path)) | Event::FetcherRemoveDocument(_, ref path) => {
                 self.remove(path, hub, rq, context)
-                    .map_err(|e| eprintln!("{}", e))
+                    .map_err(|e| eprintln!("Can't remove document: {:#}.", e))
+                    .ok();
+                true
+            },
+            Event::Select(EntryId::CopyTo(ref path, index)) => {
+                self.copy_to(path, index, context)
+                    .map_err(|e| eprintln!("Can't copy document: {:#}.", e))
                     .ok();
                 true
             },
             Event::Select(EntryId::MoveTo(ref path, index)) => {
                 self.move_to(path, index, hub, rq, context)
-                    .map_err(|e| eprintln!("{}", e))
+                    .map_err(|e| eprintln!("Can't move document: {:#}.", e))
                     .ok();
                 true
             },
@@ -1585,7 +1737,7 @@ impl View for Home {
                 true
             },
             Event::FetcherSearch { id, ref path, ref query, ref sort_by } => {
-                let path = path.as_ref().unwrap_or_else(|| &context.library.home);
+                let path = path.as_ref().unwrap_or(&context.library.home);
                 let query = query.as_ref().and_then(|text| BookQuery::new(text));
                 let (mut files, _) = context.library.list(path, query.as_ref(), false);
                 if let Some((sort_method, reverse_order)) = *sort_by {
@@ -1598,7 +1750,6 @@ impl View for Home {
                 if let Some(fetcher) = self.background_fetchers.get_mut(&id) {
                     if let Some(stdin) = fetcher.process.stdin.as_mut() {
                         writeln!(stdin, "{}", json!({"type": "search",
-                                                     "path": context.library.home,
                                                      "results": files})).ok();
                     }
                 }
@@ -1609,8 +1760,7 @@ impl View for Home {
                     if let Ok(exit_status) = fetcher.process.wait() {
                         if !exit_status.success() {
                             let msg = format!("{}: abnormal process termination.", fetcher.path.display());
-                            let notif = Notification::new(ViewId::MessageNotif,
-                                                          msg, hub, rq, context);
+                            let notif = Notification::new(msg, hub, rq, context);
                             self.children.push(Box::new(notif) as Box<dyn View>);
                         }
                     }

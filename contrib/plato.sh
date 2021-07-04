@@ -3,6 +3,12 @@
 WORKDIR=$(dirname "$0")
 cd "$WORKDIR" || exit 1
 
+PLATO_SET_FRAMEBUFFER_DEPTH=1
+PLATO_CONVERT_DICTIONARIES=1
+
+# shellcheck disable=SC1091
+[ -e config.sh ] && . config.sh
+
 if [ "$PLATO_STANDALONE" ] ; then
 	# Stop the animation started by rcS
 	REM_TRIES=10
@@ -11,19 +17,19 @@ if [ "$PLATO_STANDALONE" ] ; then
 		REM_TRIES=$((REM_TRIES-1))
 		usleep 400000
 	done
-
-	# Turn off the blinking LEDs
-	# https://www.tablix.org/~avian/blog/archives/2013/03/blinken_kindle/
-	LEDS_INTERFACE=/sys/devices/platform/pmic_light.1/lit
-	echo "ch 4" > "$LEDS_INTERFACE"
-	echo "cur 0" > "$LEDS_INTERFACE"
-	echo "dc 0" > "$LEDS_INTERFACE"
 else
 	# shellcheck disable=SC2046
 	export $(grep -sE '^(INTERFACE|WIFI_MODULE|DBUS_SESSION_BUS_ADDRESS|NICKEL_HOME|LANG)=' /proc/"$(pidof -s nickel)"/environ)
 	sync
 	killall -TERM nickel hindenburg sickel fickel adobehost fmon > /dev/null 2>&1
 fi
+
+# Turn off the blinking LEDs
+# https://www.tablix.org/~avian/blog/archives/2013/03/blinken_kindle/
+LEDS_INTERFACE=/sys/devices/platform/pmic_light.1/lit
+echo "ch 4" > "$LEDS_INTERFACE"
+echo "cur 0" > "$LEDS_INTERFACE"
+echo "dc 0" > "$LEDS_INTERFACE"
 
 # Remount the SD card read-write if it's mounted read-only
 grep -q ' /mnt/sd .*[ ,]ro[ ,]' /proc/mounts && mount -o remount,rw /mnt/sd
@@ -52,6 +58,7 @@ if [ -e "$KOBO_TAG" ] ; then
 		376)     PRODUCT_ID=0x4228 ;; # Clara HD
 		377|380) PRODUCT_ID=0x4229 ;; # Forma, Forma 32GB
 		384)     PRODUCT_ID=0x4232 ;; # Libra H₂O
+		382)     PRODUCT_ID=0x4230 ;; # Nia
 		*)       PRODUCT_ID=0x6666 ;;
 	esac
 
@@ -62,14 +69,18 @@ export LD_LIBRARY_PATH="libs:${LD_LIBRARY_PATH}"
 
 [ -e info.log ] && [ "$(stat -c '%s' info.log)" -gt $((1<<18)) ] && mv info.log archive.log
 
-case "${PRODUCT}:${MODEL_NUMBER}" in
-	storm:*|frost:*|nova:*|snow:378|star:379)
-		unset ORIG_BPP
-		;;
-	*)
-		ORIG_BPP=$(./bin/utils/fbdepth -g)
-		;;
-esac
+[ "$PLATO_CONVERT_DICTIONARIES" ] && find dictionaries -name '*.ifo' -exec ./convert-dictionary.sh {} \;
+
+if [ "$PLATO_SET_FRAMEBUFFER_DEPTH" ] ; then
+	case "${PRODUCT}:${MODEL_NUMBER}" in
+		storm:*|frost:*|nova:*|snow:378|star:379)
+			unset ORIG_BPP
+			;;
+		*)
+			ORIG_BPP=$(./bin/utils/fbdepth -g)
+			;;
+	esac
+fi
 
 [ "$ORIG_BPP" ] && ./bin/utils/fbdepth -q -d 8
 

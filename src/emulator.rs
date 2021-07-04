@@ -31,7 +31,7 @@ use anyhow::{Error, Context as ResultExt};
 use fxhash::FxHashMap;
 use chrono::Local;
 use sdl2::event::Event as SdlEvent;
-use sdl2::keyboard::{Scancode, Keycode};
+use sdl2::keyboard::{Scancode, Keycode, Mod};
 use sdl2::render::{WindowCanvas, BlendMode};
 use sdl2::pixels::{Color as SdlColor, PixelFormatEnum};
 use sdl2::mouse::MouseState;
@@ -48,6 +48,7 @@ use crate::view::notification::Notification;
 use crate::view::dialog::Dialog;
 use crate::view::frontlight::FrontlightWindow;
 use crate::view::menu::{Menu, MenuKind};
+use crate::view::intermission::Intermission;
 use crate::view::dictionary::Dictionary;
 use crate::view::calculator::Calculator;
 use crate::view::sketch::Sketch;
@@ -56,7 +57,7 @@ use crate::view::rotation_values::RotationValues;
 use crate::view::common::{locate, locate_by_id, transfer_notifications, overlapping_rectangle};
 use crate::view::common::{toggle_input_history_menu, toggle_keyboard_layout_menu};
 use crate::helpers::{load_toml, save_toml};
-use crate::settings::{Settings, SETTINGS_PATH};
+use crate::settings::{Settings, SETTINGS_PATH, IntermKind};
 use crate::geom::{Rectangle, Axis};
 use crate::gesture::{GestureEvent, gesture_events};
 use crate::device::CURRENT_DEVICE;
@@ -89,6 +90,17 @@ pub fn build_context(fb: Box<dyn Framebuffer>) -> Result<Context, Error> {
 #[inline]
 fn seconds(timestamp: u32) -> f64 {
     timestamp as f64 / 1000.0
+}
+
+impl IntermKind {
+    pub fn from_scancode(sc: Scancode) -> Option<Self> {
+        match sc {
+            Scancode::S => Some(IntermKind::Suspend),
+            Scancode::P => Some(IntermKind::PowerOff),
+            Scancode::C => Some(IntermKind::Share),
+            _ => None,
+        }
+    }
 }
 
 #[inline]
@@ -169,13 +181,13 @@ impl Framebuffer for WindowCanvas {
 
     fn save(&self, path: &str) -> Result<(), Error> {
         let (width, height) = self.dims();
-        let file = File::create(path).with_context(|| format!("Can't create output file {}.", path))?;
+        let file = File::create(path).with_context(|| format!("can't create output file {}", path))?;
         let mut encoder = png::Encoder::new(file, width, height);
         encoder.set_depth(png::BitDepth::Eight);
         encoder.set_color(png::ColorType::RGB);
-        let mut writer = encoder.write_header().with_context(|| format!("Can't write PNG header for {}.", path))?;
+        let mut writer = encoder.write_header().with_context(|| format!("can't write PNG header for {}", path))?;
         let data = self.read_pixels(self.viewport(), PixelFormatEnum::RGB24).unwrap_or_default();
-        writer.write_image_data(&data).with_context(|| format!("Can't write PNG data to {}.", path))?;
+        writer.write_image_data(&data).with_context(|| format!("can't write PNG data to {}", path))?;
         Ok(())
     }
 
@@ -287,39 +299,61 @@ fn main() -> Result<(), Error> {
         if let Some(sdl_evt) = event_pump.wait_event_timeout(20) {
             match sdl_evt {
                 SdlEvent::Quit { .. } |
-                SdlEvent::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                SdlEvent::KeyDown { keycode: Some(Keycode::Escape), keymod: Mod::NOMOD, .. } => {
                     view.handle_event(&Event::Back, &tx, &mut VecDeque::new(), &mut RenderQueue::new(), &mut context);
                     while let Some(mut view) = history.pop() {
                         view.handle_event(&Event::Back, &tx, &mut VecDeque::new(), &mut RenderQueue::new(), &mut context);
                     }
                     break;
                 },
-                SdlEvent::KeyDown { scancode: Some(scancode), .. } => {
-                    match scancode {
-                        Scancode::LeftBracket => {
-                            let rot = (3 + context.display.rotation) % 4;
-                            ty.send(DeviceEvent::RotateScreen(rot)).ok();
+                SdlEvent::KeyDown { scancode: Some(scancode), keymod, .. } => {
+                    match keymod {
+                        Mod::NOMOD => {
+                            match scancode {
+                                Scancode::LeftBracket => {
+                                    let rot = (3 + context.display.rotation) % 4;
+                                    ty.send(DeviceEvent::RotateScreen(rot)).ok();
+                                },
+                                Scancode::RightBracket => {
+                                    let rot = (5 + context.display.rotation) % 4;
+                                    ty.send(DeviceEvent::RotateScreen(rot)).ok();
+                                },
+                                Scancode::S => {
+                                    tx.send(Event::Select(EntryId::TakeScreenshot)).ok();
+                                },
+                                Scancode::I | Scancode::O => {
+                                    let mouse_state = MouseState::new(&event_pump);
+                                    let x = mouse_state.x() as i32;
+                                    let y = mouse_state.y() as i32;
+                                    let center = pt!(x, y);
+                                    if scancode == Scancode::I {
+                                        tx.send(Event::Gesture(GestureEvent::Spread { center,
+                                                                                      factor: 2.0,
+                                                                                      axis: Axis::Diagonal })).ok();
+                                    } else {
+                                        tx.send(Event::Gesture(GestureEvent::Pinch { center,
+                                                                                     factor: 0.5,
+                                                                                     axis: Axis::Diagonal })).ok();
+                                    }
+                                },
+                                _ => (),
+                            }
                         },
-                        Scancode::RightBracket => {
-                            let rot = (5 + context.display.rotation) % 4;
-                            ty.send(DeviceEvent::RotateScreen(rot)).ok();
-                        },
-                        Scancode::S => {
-                            tx.send(Event::Select(EntryId::TakeScreenshot)).ok();
-                        },
-                        Scancode::I | Scancode::O => {
-                            let mouse_state = MouseState::new(&event_pump);
-                            let x = mouse_state.x() as i32;
-                            let y = mouse_state.y() as i32;
-                            let center = pt!(x, y);
-                            if scancode == Scancode::I {
-                                tx.send(Event::Gesture(GestureEvent::Spread { center,
-                                                                              factor: 2.0,
-                                                                              axis: Axis::Diagonal })).ok();
-                            } else {
-                                tx.send(Event::Gesture(GestureEvent::Pinch { center,
-                                                                             factor: 0.5,
-                                                                             axis: Axis::Diagonal })).ok();
+                        Mod::LSHIFTMOD | Mod::RSHIFTMOD => {
+                            match scancode {
+                                Scancode::S | Scancode::P | Scancode::C => {
+                                    if let Some(index) = locate::<Intermission>(view.as_ref()) {
+                                        let rect = *view.child(index).rect();
+                                        view.children_mut().remove(index);
+                                        rq.add(RenderData::expose(rect, UpdateMode::Full));
+                                    } else if let Some(kind) = IntermKind::from_scancode(scancode) {
+                                        view.handle_event(&Event::Suspend, &tx, &mut VecDeque::new(), &mut RenderQueue::new(), &mut context);
+                                        let interm = Intermission::new(context.fb.rect(), kind, &context);
+                                        rq.add(RenderData::new(interm.id(), *interm.rect(), UpdateMode::Full));
+                                        view.children_mut().push(Box::new(interm) as Box<dyn View>);
+                                    }
+                                },
+                                _ => (),
                             }
                         },
                         _ => (),
@@ -489,21 +523,18 @@ fn main() -> Result<(), Error> {
                         Err(e) => format!("Couldn't take screenshot: {}).", e),
                         Ok(_) => format!("Saved {}.", name),
                     };
-                    let notif = Notification::new(ViewId::TakeScreenshotNotif,
-                                                  msg, &tx, &mut rq, &mut context);
+                    let notif = Notification::new(msg, &tx, &mut rq, &mut context);
                     view.children_mut().push(Box::new(notif) as Box<dyn View>);
                 },
                 Event::Notify(msg) => {
-                    let notif = Notification::new(ViewId::MessageNotif,
-                                                  msg, &tx, &mut rq, &mut context);
+                    let notif = Notification::new(msg, &tx, &mut rq, &mut context);
                     view.children_mut().push(Box::new(notif) as Box<dyn View>);
                 },
                 Event::Device(DeviceEvent::NetUp) |
                 Event::CheckFetcher(..) |
                 Event::FetcherAddDocument(..) |
-                Event::FetcherSearch { .. } |
-                Event::FetcherCleanUp(..) |
-                Event::FetcherImport(..) if !view.is::<Home>() => {
+                Event::FetcherRemoveDocument(..) |
+                Event::FetcherSearch { .. } if !view.is::<Home>() => {
                     if let Some(home) = history.get_mut(0).filter(|view| view.is::<Home>()) {
                         let (tx, _rx) = mpsc::channel();
                         home.handle_event(&evt, &tx, &mut VecDeque::new(), &mut RenderQueue::new(), &mut context);
@@ -557,7 +588,7 @@ fn main() -> Result<(), Error> {
     context.library.flush();
 
     let path = Path::new(SETTINGS_PATH);
-    save_toml(&context.settings, path).context("Can't save settings.")?;
+    save_toml(&context.settings, path).context("can't save settings")?;
 
     Ok(())
 }

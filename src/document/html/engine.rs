@@ -13,15 +13,19 @@ use crate::document::{Document, Location};
 use crate::document::pdf::PdfOpener;
 use crate::unit::{mm_to_px, pt_to_px};
 use crate::geom::{Point, Vec2, Rectangle, Edge};
+use crate::settings::{HYPHEN_PENALTY, STRETCH_TOLERANCE};
 use crate::settings::{DEFAULT_FONT_SIZE, DEFAULT_MARGIN_WIDTH, DEFAULT_TEXT_ALIGN, DEFAULT_LINE_HEIGHT};
-use super::parse::{parse_display, parse_edge, parse_float, parse_text_align, parse_text_indent, parse_width, parse_height, parse_inline_material};
-use super::parse::{parse_font_kind, parse_font_style, parse_font_weight, parse_font_size, parse_font_features, parse_font_variant, parse_letter_spacing};
+use super::parse::{parse_display, parse_edge, parse_float, parse_text_align, parse_text_indent};
+use super::parse::{parse_width, parse_height, parse_inline_material, parse_font_kind, parse_font_style};
+use super::parse::{parse_font_weight, parse_font_size, parse_font_features, parse_font_variant};
+use super::parse::{parse_letter_spacing, parse_word_spacing};
 use super::parse::{parse_line_height, parse_vertical_align, parse_color, parse_list_style_type};
 use super::dom::{Node, ElementData, TextData};
 use super::layout::{StyleData, InlineMaterial, TextMaterial, ImageMaterial};
 use super::layout::{GlueMaterial, PenaltyMaterial, ChildArtifact, SiblingStyle, LoopContext};
 use super::layout::{RootData, DrawState, DrawCommand, TextCommand, ImageCommand, FontKind, Fonts};
-use super::layout::{TextAlign, ParagraphElement, TextElement, ImageElement, Display, Float, ListStyleType, LineStats};
+use super::layout::{TextAlign, ParagraphElement, TextElement, ImageElement, Display, Float};
+use super::layout::{WordSpacing, ListStyleType, LineStats};
 use super::layout::{hyph_lang, collapse_margins, DEFAULT_HYPH_LANG, HYPHENATION_PATTERNS};
 use super::layout::{EM_SPACE_RATIOS, WORD_SPACE_RATIOS, FONT_SPACES};
 use super::style::{Stylesheet, specified_values};
@@ -29,8 +33,6 @@ use super::style::{Stylesheet, specified_values};
 const DEFAULT_DPI: u16 = 300;
 const DEFAULT_WIDTH: u32 = 1404;
 const DEFAULT_HEIGHT: u32 = 1872;
-const HYPHEN_PENALTY: i32 = 50;
-const STRETCH_TOLERANCE: f32 = 1.26;
 
 pub type Page = Vec<DrawCommand>;
 
@@ -41,7 +43,12 @@ pub trait ResourceFetcher {
 // TODO: Add min_font_size.
 #[derive(Clone)]
 pub struct Engine {
+    // The fonts used for each CSS font family.
     fonts: Option<Fonts>,
+    // The penalty for lines ending with a hyphen.
+    hyphen_penalty: i32,
+    // The stretching/shrinking allowed for word spaces.
+    stretch_tolerance: f32,
     // Page margins in pixels.
     pub margin: Edge,
     // Font size in points.
@@ -63,6 +70,8 @@ impl Engine {
 
         Engine {
             fonts: None,
+            hyphen_penalty: HYPHEN_PENALTY,
+            stretch_tolerance: STRETCH_TOLERANCE,
             margin,
             font_size: DEFAULT_FONT_SIZE,
             text_align: DEFAULT_TEXT_ALIGN,
@@ -77,6 +86,14 @@ impl Engine {
         if self.fonts.is_none() {
             self.fonts = default_fonts().ok();
         }
+    }
+
+    pub fn set_hyphen_penalty(&mut self, hyphen_penalty: i32) {
+        self.hyphen_penalty = hyphen_penalty;
+    }
+
+    pub fn set_stretch_tolerance(&mut self, stretch_tolerance: f32) {
+        self.stretch_tolerance = stretch_tolerance;
     }
 
     pub fn set_margin(&mut self, margin: &Edge) {
@@ -178,6 +195,10 @@ impl Engine {
         style.letter_spacing = props.get("letter-spacing")
                                     .and_then(|value| parse_letter_spacing(value, style.font_size, self.font_size, self.dpi))
                                     .unwrap_or(parent_style.letter_spacing);
+
+        style.word_spacing = props.get("word-spacing")
+                                    .and_then(|value| parse_word_spacing(value, style.font_size, self.font_size, self.dpi))
+                                    .unwrap_or(parent_style.word_spacing);
 
         style.vertical_align = props.get("vertical-align")
                                     .and_then(|value| parse_vertical_align(value, style.font_size, self.font_size, style.line_height, self.dpi))
@@ -296,8 +317,8 @@ impl Engine {
         draw_state.position.y += style.padding.top;
 
         let has_blocks = node.children().and_then(|children| {
-            children.iter().skip_while(|child| child.is_whitespace())
-                    .next().map(Node::is_block)
+            children.iter().find(|child| !child.is_whitespace())
+                    .map(Node::is_block)
         });
 
         if has_blocks == Some(true) {
@@ -306,8 +327,9 @@ impl Engine {
                             .push(DrawCommand::Marker(root_data.start_offset + node.offset()));
             }
             if let Some(children) = node.children() {
-                let mut inner_loop_context = LoopContext::default();
-                inner_loop_context.parent = Some(node);
+                let mut inner_loop_context = LoopContext {
+                    parent: Some(node), .. Default::default()
+                };
 
                 if node.tag_name() == Some("tr") {
                     inner_loop_context.is_first = loop_context.is_first;
@@ -429,7 +451,7 @@ impl Engine {
                         inner_loop_context.index = index;
 
                         if child.tag_name() == Some("anonymous") {
-                            inner_loop_context.parent = loop_context.parent.clone();
+                            inner_loop_context.parent = loop_context.parent;
                             inner_loop_context.index = loop_context.index;
                         }
 
@@ -619,6 +641,10 @@ impl Engine {
                                             .and_then(|value| parse_letter_spacing(value, style.font_size, self.font_size, self.dpi))
                                             .unwrap_or(parent_style.letter_spacing);
 
+                style.word_spacing = props.get("word-spacing")
+                                            .and_then(|value| parse_word_spacing(value, style.font_size, self.font_size, self.dpi))
+                                            .unwrap_or(parent_style.word_spacing);
+
                 style.vertical_align = props.get("vertical-align")
                                             .and_then(|value| parse_vertical_align(value, style.font_size, self.font_size, style.line_height, self.dpi))
                                             .unwrap_or(parent_style.vertical_align);
@@ -705,35 +731,11 @@ impl Engine {
                 }
             },
             Node::Text(TextData { offset, text }) => {
-                let mut index = 0;
-                while let Some(start_delta) = text[index..].find('&') {
-                    if start_delta > 0 {
-                        inlines.push(InlineMaterial::Text(TextMaterial {
-                            offset: *offset + index,
-                            text: text[index..index+start_delta].to_string(),
-                            style: parent_style.clone(),
-                        }));
-                    }
-                    index += start_delta;
-                    if let Some(end_delta) = text[index..].find(';') {
-                        inlines.push(InlineMaterial::Text(TextMaterial {
-                            offset: *offset + index,
-                            text: decode_entities(&text[index..=index+end_delta]).into_owned(),
-                            style: parent_style.clone(),
-                        }));
-                        index += end_delta + 1;
-                    } else {
-                        break;
-                    }
-                }
-                if index < text.len() {
-                    inlines.push(InlineMaterial::Text(TextMaterial {
-                        offset: *offset + index,
-                        text: text[index..].to_string(),
-                        style: parent_style.clone(),
-                    }));
-                }
-                return;
+                inlines.push(InlineMaterial::Text(TextMaterial {
+                    offset: *offset,
+                    text: decode_entities(&text).into_owned(),
+                    style: parent_style.clone(),
+                }));
             },
             Node::Whitespace(TextData { offset, text }) => {
                 inlines.push(InlineMaterial::Text(TextMaterial {
@@ -748,29 +750,24 @@ impl Engine {
     fn make_paragraph_items(&mut self, inlines: &[InlineMaterial], parent_style: &StyleData, line_width: i32, resource_fetcher: &mut dyn ResourceFetcher) -> (Vec<ParagraphItem<ParagraphElement>>, Vec<ImageElement>) {
         let mut items = Vec::new();
         let mut floats = Vec::new();
-        let font_size = (parent_style.font_size * 64.0) as u32;
-        let space_plan = {
+        let big_stretch = 3 * {
+            let font_size = (parent_style.font_size * 64.0) as u32;
             let font = self.fonts.as_mut().unwrap()
                            .get_mut(parent_style.font_kind,
                                     parent_style.font_style,
                                     parent_style.font_weight);
             font.set_size(font_size, self.dpi);
-            font.plan(" 0.", None, None)
+            font.plan(" ", None, None).width
         };
-
-        let big_stretch = 3 * space_plan.glyph_advance(0);
 
         if parent_style.text_align == TextAlign::Center {
             items.push(ParagraphItem::Box { width: 0, data: ParagraphElement::Nothing });
             items.push(ParagraphItem::Glue { width: 0, stretch: big_stretch, shrink: 0 });
         }
 
-        let mut last_c = None;
-
-        for m in inlines.iter() {
-            match m {
+        for (index, mater) in inlines.iter().enumerate() {
+            match mater {
                 InlineMaterial::Image(ImageMaterial { offset, path, style }) => {
-                    last_c = None;
                     let (mut width, mut height) = (style.width, style.height);
                     let mut scale = 1.0;
                     let dpi = self.dpi;
@@ -815,168 +812,149 @@ impl Engine {
                     }
                 },
                 InlineMaterial::Text(TextMaterial { offset, text, style }) => {
-                    let mut buf = String::new();
                     let font_size = (style.font_size * 64.0) as u32;
+                    let space_plan = {
+                        let font = self.fonts.as_mut().unwrap()
+                                       .get_mut(parent_style.font_kind,
+                                                parent_style.font_style,
+                                                parent_style.font_weight);
+                        font.set_size(font_size, self.dpi);
+                        font.plan(" 0.", None, None)
+                    };
+                    let mut start_index = 0;
+                    for (end_index, _is_hardbreak) in LineBreakIterator::new(&text) {
+                        for chunk in text[start_index..end_index].split_inclusive(char::is_whitespace) {
+                            if let Some((i, c)) = chunk.char_indices().next_back() {
+                                let j = i + if c.is_whitespace() { 0 } else { c.len_utf8() };
+                                if j > 0 {
+                                    let buf = &text[start_index..start_index+j];
+                                    let local_offset = offset + start_index;
+                                    let mut plan = {
+                                        let font = self.fonts.as_mut().unwrap()
+                                                       .get_mut(style.font_kind,
+                                                                style.font_style,
+                                                                style.font_weight);
+                                        font.set_size(font_size, self.dpi);
+                                        font.plan(buf, None, style.font_features.as_deref())
+                                    };
+                                    plan.space_out(style.letter_spacing);
 
-                    for (i, c) in text.char_indices() {
-                        if c.is_whitespace() {
-                            if !buf.is_empty() {
-                                let local_offset = offset + i - buf.len() + 1;
-                                let mut plan = {
-                                    let font = self.fonts.as_mut().unwrap()
-                                                   .get_mut(style.font_kind,
-                                                            style.font_style,
-                                                            style.font_weight);
-                                    font.set_size(font_size, self.dpi);
-                                    font.plan(&buf, None, style.font_features.as_ref().map(Vec::as_slice))
-                                };
-                                plan.space_out(style.letter_spacing);
-
-                                items.push(ParagraphItem::Box {
-                                    width: plan.width,
-                                    data: ParagraphElement::Text(TextElement {
-                                        offset: local_offset,
-                                        language: style.language.clone(),
-                                        text: buf,
-                                        plan,
-                                        font_features: style.font_features.clone(),
-                                        font_kind: style.font_kind,
-                                        font_style: style.font_style,
-                                        font_weight: style.font_weight,
-                                        vertical_align: style.vertical_align,
-                                        letter_spacing: style.letter_spacing,
-                                        font_size,
-                                        color: style.color,
-                                        uri: style.uri.clone(),
-                                    }),
-                                });
-
-                                buf = String::new();
-                            }
-
-                            if c == '\n' && parent_style.retain_whitespace {
-                                let stretch = if parent_style.text_align == TextAlign::Center { big_stretch } else { line_width };
-
-                                items.push(ParagraphItem::Penalty { penalty: INFINITE_PENALTY, width: 0, flagged: false });
-                                items.push(ParagraphItem::Glue { width: 0, stretch, shrink: 0 });
-
-                                items.push(ParagraphItem::Penalty { width: 0, penalty: -INFINITE_PENALTY, flagged: false });
-
-                                if parent_style.text_align == TextAlign::Center {
-                                    items.push(ParagraphItem::Box { width: 0, data: ParagraphElement::Nothing });
-                                    items.push(ParagraphItem::Penalty { width: 0, penalty: INFINITE_PENALTY, flagged: false });
-                                    items.push(ParagraphItem::Glue { width: 0, stretch: big_stretch, shrink: 0 });
+                                    items.push(ParagraphItem::Box {
+                                        width: plan.width,
+                                        data: ParagraphElement::Text(TextElement {
+                                            offset: local_offset,
+                                            language: style.language.clone(),
+                                            text: buf.to_string(),
+                                            plan,
+                                            font_features: style.font_features.clone(),
+                                            font_kind: style.font_kind,
+                                            font_style: style.font_style,
+                                            font_weight: style.font_weight,
+                                            vertical_align: style.vertical_align,
+                                            letter_spacing: style.letter_spacing,
+                                            font_size,
+                                            color: style.color,
+                                            uri: style.uri.clone(),
+                                        }),
+                                    });
                                 }
-                                last_c = Some(c);
-                                continue;
-                            }
+                                if c.is_whitespace() {
+                                    if c == '\n' && parent_style.retain_whitespace {
+                                        let stretch = if parent_style.text_align == TextAlign::Center { big_stretch } else { line_width };
 
-                            if !parent_style.retain_whitespace && (c == ' ' || c.is_control()) &&
-                               (last_c.map(|c| c == ' ' || c.is_control()) == Some(true)) {
-                                   last_c = Some(c);
-                                   continue;
-                            }
-
-                            let mut width = if let Some(index) = FONT_SPACES.chars().position(|x| x == c) {
-                                space_plan.glyph_advance(index)
-                            } else if let Some(ratio) = WORD_SPACE_RATIOS.get(&c) {
-                                (space_plan.glyph_advance(0) as f32 * ratio) as i32
-                            } else if let Some(ratio) = EM_SPACE_RATIOS.get(&c) {
-                                pt_to_px(style.font_size * ratio, self.dpi).round() as i32
-                            } else {
-                                space_plan.glyph_advance(0)
-                            };
-
-                            width += 2 * style.letter_spacing;
-
-                            let (stretch, shrink) = if style.font_kind != FontKind::Monospace {
-                                (width / 2, width / 3)
-                            } else {
-                                (0, 0)
-                            };
-
-                            if parent_style.retain_whitespace && last_c == Some('\n') {
-                                items.push(ParagraphItem::Box { width: 0, data: ParagraphElement::Nothing });
-                            }
-
-                            let is_unbreakable = c == '\u{00A0}' || c == '\u{202F}' || c == '\u{2007}';
-
-                            if is_unbreakable {
-                                items.push(ParagraphItem::Penalty { width: 0, penalty: INFINITE_PENALTY, flagged: false });
-                            }
-
-                            match parent_style.text_align {
-                                TextAlign::Justify => {
-                                    items.push(ParagraphItem::Glue { width, stretch, shrink });
-                                },
-                                TextAlign::Center => {
-                                    if is_unbreakable {
-                                        items.push(ParagraphItem::Glue { width, stretch: 0, shrink: 0 });
-                                    } else {
-                                        let stretch = 3 * width;
+                                        items.push(ParagraphItem::Penalty { penalty: INFINITE_PENALTY, width: 0, flagged: false });
                                         items.push(ParagraphItem::Glue { width: 0, stretch, shrink: 0 });
-                                        items.push(ParagraphItem::Penalty { width: 0, penalty: 0, flagged: false });
-                                        items.push(ParagraphItem::Glue { width, stretch: -2 * stretch, shrink: 0 });
+
+                                        items.push(ParagraphItem::Penalty { width: 0, penalty: -INFINITE_PENALTY, flagged: false });
+
+                                        if parent_style.text_align == TextAlign::Center {
+                                            items.push(ParagraphItem::Box { width: 0, data: ParagraphElement::Nothing });
+                                            items.push(ParagraphItem::Penalty { width: 0, penalty: INFINITE_PENALTY, flagged: false });
+                                            items.push(ParagraphItem::Glue { width: 0, stretch: big_stretch, shrink: 0 });
+                                        }
+                                        start_index += chunk.len();
+                                        continue;
+                                    }
+
+                                    let last_c = text[..start_index+i].chars().next_back().or_else(|| {
+                                        if index > 0 {
+                                            inlines[index-1].text().and_then(|text| text.chars().next_back())
+                                        } else {
+                                            None
+                                        }
+                                    });
+
+                                    if !parent_style.retain_whitespace && (c == ' ' || c.is_control()) &&
+                                        (last_c.map(|c| c == ' ' || c.is_control()) == Some(true)) {
+                                            start_index += chunk.len();
+                                            continue;
+                                    }
+
+                                    let mut width = if let Some(index) = FONT_SPACES.chars().position(|x| x == c) {
+                                        space_plan.glyph_advance(index)
+                                    } else if let Some(ratio) = WORD_SPACE_RATIOS.get(&c) {
+                                        (space_plan.glyph_advance(0) as f32 * ratio) as i32
+                                    } else if let Some(ratio) = EM_SPACE_RATIOS.get(&c) {
+                                        pt_to_px(style.font_size * ratio, self.dpi).round() as i32
+                                    } else {
+                                        space_plan.glyph_advance(0)
+                                    };
+
+                                    width += match style.word_spacing {
+                                        WordSpacing::Normal => 0,
+                                        WordSpacing::Length(l) => l,
+                                        WordSpacing::Ratio(r) => (r * width as f32) as i32,
+                                    } + style.letter_spacing;
+
+                                    if parent_style.retain_whitespace && last_c == Some('\n') {
                                         items.push(ParagraphItem::Box { width: 0, data: ParagraphElement::Nothing });
-                                        items.push(ParagraphItem::Penalty { width: 0, penalty: INFINITE_PENALTY, flagged: false });
-                                        items.push(ParagraphItem::Glue { width: 0, stretch, shrink: 0 });
                                     }
-                                },
-                                TextAlign::Left | TextAlign::Right => {
+
+                                    let is_unbreakable = c == '\u{00A0}' || c == '\u{202F}' || c == '\u{2007}';
+
                                     if is_unbreakable {
-                                        items.push(ParagraphItem::Glue { width, stretch: 0, shrink: 0 });
-                                    } else {
-                                        let stretch = 3 * width;
-                                        items.push(ParagraphItem::Glue { width: 0, stretch, shrink: 0 });
-                                        items.push(ParagraphItem::Penalty { width: 0, penalty: 0, flagged: false });
-                                        items.push(ParagraphItem::Glue { width, stretch: -stretch, shrink: 0 });
+                                        items.push(ParagraphItem::Penalty { width: 0, penalty: INFINITE_PENALTY, flagged: false });
                                     }
-                                },
+
+                                    match parent_style.text_align {
+                                        TextAlign::Justify => {
+                                            items.push(ParagraphItem::Glue { width, stretch: width/2, shrink: width/3 });
+                                        },
+                                        TextAlign::Center => {
+                                            if style.font_kind == FontKind::Monospace {
+                                                items.push(ParagraphItem::Glue { width, stretch: 0, shrink: 0 });
+                                            } else {
+                                                let stretch = 3 * width;
+                                                items.push(ParagraphItem::Glue { width: 0, stretch, shrink: 0 });
+                                                items.push(ParagraphItem::Penalty { width: 0, penalty: 0, flagged: false });
+                                                items.push(ParagraphItem::Glue { width, stretch: -2 * stretch, shrink: 0 });
+                                                items.push(ParagraphItem::Box { width: 0, data: ParagraphElement::Nothing });
+                                                items.push(ParagraphItem::Penalty { width: 0, penalty: INFINITE_PENALTY, flagged: false });
+                                                items.push(ParagraphItem::Glue { width: 0, stretch, shrink: 0 });
+                                            }
+                                        },
+                                        TextAlign::Left | TextAlign::Right => {
+                                            if style.font_kind == FontKind::Monospace {
+                                                items.push(ParagraphItem::Glue { width, stretch: 0, shrink: 0 });
+                                            } else {
+                                                let stretch = 3 * width;
+                                                items.push(ParagraphItem::Glue { width: 0, stretch, shrink: 0 });
+                                                items.push(ParagraphItem::Penalty { width: 0, penalty: 0, flagged: false });
+                                                items.push(ParagraphItem::Glue { width, stretch: -stretch, shrink: 0 });
+                                            }
+                                        },
+                                    }
+                                } else if end_index < text.len() {
+                                    let penalty = if c == '-' { self.hyphen_penalty } else { 0 };
+                                    let flagged = penalty > 0;
+                                    items.push(ParagraphItem::Penalty { width: 0, penalty, flagged });
+                                }
                             }
-
-                        } else {
-                            buf.push(c);
+                            start_index += chunk.len();
                         }
-
-                        last_c = Some(c);
-                    }
-
-                    // TODO: Find a way to integrate this into the main loop?
-                    if !buf.is_empty() {
-                        let local_offset = offset + text.char_indices().last().map(|(i, _)| i).unwrap_or(text.len() - 1) - buf.len() + 1;
-                        let font_size = (style.font_size * 64.0) as u32;
-                        let mut plan = {
-                            let font = self.fonts.as_mut().unwrap()
-                                           .get_mut(style.font_kind,
-                                                    style.font_style,
-                                                    style.font_weight);
-                            font.set_size(font_size, self.dpi);
-                            font.plan(&buf, None, style.font_features.as_ref().map(Vec::as_slice))
-                        };
-                        plan.space_out(style.letter_spacing);
-                        items.push(ParagraphItem::Box {
-                            width: plan.width,
-                            data: ParagraphElement::Text(TextElement {
-                                offset: local_offset,
-                                language: style.language.clone(),
-                                text: buf,
-                                plan,
-                                font_features: style.font_features.clone(),
-                                font_kind: style.font_kind,
-                                font_style: style.font_style,
-                                font_weight: style.font_weight,
-                                vertical_align: style.vertical_align,
-                                letter_spacing: style.letter_spacing,
-                                font_size,
-                                color: style.color,
-                                uri: style.uri.clone(),
-                            }),
-                        });
                     }
                 },
                 InlineMaterial::LineBreak => {
-                    last_c = None;
-
                     let stretch = if parent_style.text_align == TextAlign::Center { big_stretch } else { line_width };
 
                     items.push(ParagraphItem::Penalty { penalty: INFINITE_PENALTY, width: 0, flagged: false });
@@ -1024,7 +1002,7 @@ impl Engine {
         };
 
         let stretch_tolerance = if style.text_align == TextAlign::Justify {
-            STRETCH_TOLERANCE
+            self.stretch_tolerance
         } else {
             10.0
         };
@@ -1153,8 +1131,7 @@ impl Engine {
                 None
             };
 
-            // Insert optional breaks.
-            items = self.insert_breaks(dictionary, items, &mut hyph_indices);
+            items = self.hyphenate_paragraph(dictionary, items, &mut hyph_indices);
             bps = total_fit(&items, &line_lengths, stretch_tolerance, 0);
         }
 
@@ -1189,7 +1166,7 @@ impl Engine {
                 }
             }
 
-            bps = standard_fit(&items, &line_lengths, STRETCH_TOLERANCE);
+            bps = standard_fit(&items, &line_lengths, self.stretch_tolerance);
         }
 
         // Remove unselected optional hyphens (prevents broken ligatures).
@@ -1201,7 +1178,6 @@ impl Engine {
         let mut markers_index = 0;
         let mut last_x_position = 0;
         let mut is_first_line = true;
-        let mut j = 0;
 
         if let Some(prefix) = draw_state.prefix.as_ref() {
             let font_size = (style.font_size * 64.0) as u32;
@@ -1209,7 +1185,7 @@ impl Engine {
                 let font = self.fonts.as_mut().unwrap()
                                .get_mut(style.font_kind, style.font_style, style.font_weight);
                 font.set_size(font_size, self.dpi);
-                font.plan(prefix, None, style.font_features.as_ref().map(Vec::as_slice))
+                font.plan(prefix, None, style.font_features.as_deref())
             };
             let (start_x, _) = para_shape[0];
             let pt = pt!(start_x - prefix_plan.width, position.y);
@@ -1225,13 +1201,13 @@ impl Engine {
                     font_kind: style.font_kind,
                     font_style: style.font_style,
                     font_weight: style.font_weight,
-                    font_size: font_size,
+                    font_size,
                     color: style.color,
                 }));
             }
         }
 
-        for bp in bps {
+        for (j, bp) in bps.into_iter().enumerate() {
             let drift = if glue_drifts.is_empty() {
                 0.0
             } else {
@@ -1417,7 +1393,7 @@ impl Engine {
                         let font = self.fonts.as_mut().unwrap()
                                        .get_mut(style.font_kind, style.font_style, style.font_weight);
                         font.set_size(font_size, self.dpi);
-                        font.plan("-", None, style.font_features.as_ref().map(Vec::as_slice))
+                        font.plan("-", None, style.font_features.as_deref())
                     };
                     if let Some(DrawCommand::Text(TextCommand { ref mut rect, ref mut plan, ref mut text, .. })) = page.last_mut() {
                         rect.max.x += hyphen_plan.width;
@@ -1440,13 +1416,19 @@ impl Engine {
                 position.y = root_data.rect.min.y + space_top;
                 page = Vec::new();
             }
-
-            j += 1;
         }
 
-        while let Some(offset) = markers.get(markers_index) {
-            page.push(DrawCommand::Marker(root_data.start_offset + *offset));
-            markers_index += 1;
+        let last_page = if !page.is_empty() {
+            Some(&mut page)
+        } else {
+            display_list.iter_mut().rev().find(|page| !page.is_empty())
+        };
+
+        if let Some(last_page) = last_page {
+            while let Some(offset) = markers.get(markers_index) {
+                last_page.push(DrawCommand::Marker(root_data.start_offset + *offset));
+                markers_index += 1;
+            }
         }
 
         rects.push(page_rect.take());
@@ -1465,7 +1447,7 @@ impl Engine {
                                     element.font_style,
                                     element.font_weight);
             font.set_size(element.font_size, self.dpi);
-            font.plan(chunk, None, element.font_features.as_ref().map(Vec::as_slice))
+            font.plan(chunk, None, element.font_features.as_deref())
         };
         plan.space_out(element.letter_spacing);
         ParagraphItem::Box {
@@ -1488,83 +1470,70 @@ impl Engine {
         }
     }
 
-    fn insert_breaks(&mut self, dictionary: Option<&Standard>, items: Vec<ParagraphItem<ParagraphElement>>, hyph_indices: &mut Vec<[usize; 2]>) -> Vec<ParagraphItem<ParagraphElement>> {
+    fn hyphenate_paragraph(&mut self, dictionary: Option<&Standard>, items: Vec<ParagraphItem<ParagraphElement>>, hyph_indices: &mut Vec<[usize; 2]>) -> Vec<ParagraphItem<ParagraphElement>> {
         let mut hyph_items = Vec::with_capacity(items.len());
 
         for itm in items {
             match itm {
                 ParagraphItem::Box { data: ParagraphElement::Text(ref element), .. } => {
                     let text = &element.text;
-                    let mut start_index = 0;
                     let hyphen_width = if dictionary.is_some() {
                         let font = self.fonts.as_mut().unwrap()
                                        .get_mut(element.font_kind, element.font_style, element.font_weight);
                         font.set_size(element.font_size, self.dpi);
-                        font.plan("-", None, element.font_features.as_ref().map(Vec::as_slice)).width
+                        font.plan("-", None, element.font_features.as_deref()).width
                     } else {
                         0
                     };
-                    for (end_index, is_hardbreak) in LineBreakIterator::new(text) {
-                        let chunk = &text[start_index..end_index];
-                        // Hyphenate.
-                        if let Some(dict) = dictionary {
-                            let mut index_before = chunk.find(char::is_alphabetic).unwrap_or_else(|| chunk.len());
-                            if index_before > 0 {
-                                    let subelem = self.box_from_chunk(&chunk[0..index_before],
-                                                                      start_index,
-                                                                      &element);
-                                    hyph_items.push(subelem);
 
-                            }
-
-                            let mut index_after = chunk[index_before..].find(|c: char| !c.is_alphabetic())
-                                                                       .map(|i| index_before + i)
-                                                                       .unwrap_or_else(|| chunk.len());
-                            while index_before < index_after {
-                                let mut index = 0;
-                                let subchunk = &chunk[index_before..index_after];
-                                let len_before = hyph_items.len();
-                                for segment in dict.hyphenate(subchunk).iter().segments() {
-
-                                    let subelem = self.box_from_chunk(segment,
-                                                                      start_index + index_before + index,
-                                                                      &element);
-                                    hyph_items.push(subelem);
-                                    index += segment.len();
-                                    if index < subchunk.len() {
-                                        hyph_items.push(ParagraphItem::Penalty { width: hyphen_width, penalty: HYPHEN_PENALTY, flagged: true });
-                                    }
-                                }
-                                let len_after = hyph_items.len();
-                                if len_after > 1 + len_before {
-                                    hyph_indices.push([len_before, len_after]);
-                                }
-                                index_before = chunk[index_after..].find(char::is_alphabetic)
-                                                                   .map(|i| index_after + i)
-                                                                   .unwrap_or_else(|| chunk.len());
-                                if index_before > index_after {
-                                    let subelem = self.box_from_chunk(&chunk[index_after..index_before],
-                                                                      start_index + index_after,
-                                                                      &element);
-                                    hyph_items.push(subelem);
-                                }
-
-                                index_after = chunk[index_before..].find(|c: char| !c.is_alphabetic())
-                                                                   .map(|i| index_before + i)
-                                                                   .unwrap_or_else(|| chunk.len());
-                            }
-                        } else {
-                            let subelem = self.box_from_chunk(chunk, start_index, &element);
+                    if let Some(dict) = dictionary {
+                        let mut index_before = text.find(char::is_alphabetic).unwrap_or_else(|| text.len());
+                        if index_before > 0 {
+                            let subelem = self.box_from_chunk(&text[0..index_before],
+                                                              0,
+                                                              &element);
                             hyph_items.push(subelem);
                         }
-                        if !is_hardbreak {
-                            let penalty = if chunk.ends_with('-') { HYPHEN_PENALTY } else { 0 };
-                            let flagged = penalty > 0;
-                            hyph_items.push(ParagraphItem::Penalty { width: 0, penalty, flagged });
-                        }
-                        start_index = end_index;
-                    }
 
+                        let mut index_after = text[index_before..].find(|c: char| !c.is_alphabetic())
+                                                                  .map(|i| index_before + i)
+                                                                  .unwrap_or_else(|| text.len());
+                        while index_before < index_after {
+                            let mut index = 0;
+                            let chunk = &text[index_before..index_after];
+                            let len_before = hyph_items.len();
+                            for segment in dict.hyphenate(chunk).iter().segments() {
+                                let subelem = self.box_from_chunk(segment,
+                                                                  index_before + index,
+                                                                  &element);
+                                hyph_items.push(subelem);
+                                index += segment.len();
+                                if index < chunk.len() {
+                                    hyph_items.push(ParagraphItem::Penalty { width: hyphen_width, penalty: self.hyphen_penalty, flagged: true });
+                                }
+                            }
+                            let len_after = hyph_items.len();
+                            if len_after > 1 + len_before {
+                                hyph_indices.push([len_before, len_after]);
+                            }
+                            index_before = text[index_after..].find(char::is_alphabetic)
+                                                               .map(|i| index_after + i)
+                                                               .unwrap_or_else(|| text.len());
+                            if index_before > index_after {
+                                let subelem = self.box_from_chunk(&text[index_after..index_before],
+                                                                  index_after,
+                                                                  &element);
+                                hyph_items.push(subelem);
+                            }
+
+                            index_after = text[index_before..].find(|c: char| !c.is_alphabetic())
+                                                               .map(|i| index_before + i)
+                                                               .unwrap_or_else(|| text.len());
+                        }
+                    } else {
+                        let subelem = self.box_from_chunk(text, 0, &element);
+                        hyph_items.push(subelem);
+                    }
                 },
                 _ => { hyph_items.push(itm) },
             }
@@ -1695,14 +1664,14 @@ impl Engine {
                 },
                 DrawCommand::Image(ImageCommand { position, path, scale, .. }) => {
                     if let Ok(buf) = resource_fetcher.fetch(path) {
-                        PdfOpener::new().and_then(|opener| {
+                        if let Some((pixmap, _)) = PdfOpener::new().and_then(|opener| {
                             opener.open_memory(path, &buf)
                         }).and_then(|mut doc| {
                             doc.pixmap(Location::Exact(0), scale_factor * *scale)
-                        }).map(|(pixmap, _)| {
+                        }) {
                             let position = Point::from(scale_factor * Vec2::from(*position));
                             fb.draw_pixmap(&pixmap, position);
-                        });
+                        }
                     }
                 },
                 _ => (),

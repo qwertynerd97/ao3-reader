@@ -22,7 +22,7 @@ impl PresetsList {
         PresetsList {
             id: ID_FEEDER.next(),
             rect,
-            pages: vec![],
+            pages: Vec::new(),
             current_page: 0,
         }
     }

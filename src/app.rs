@@ -33,7 +33,7 @@ use crate::input::{DeviceEvent, PowerSource, ButtonCode, ButtonStatus, VAL_RELEA
 use crate::input::{raw_events, device_events, usb_events, display_rotate_event, button_scheme_event};
 use crate::gesture::{GestureEvent, gesture_events};
 use crate::helpers::{load_json, load_toml, save_toml, IsHidden, get_url};
-use crate::settings::{ButtonScheme, Settings, SETTINGS_PATH, RotationLock};
+use crate::settings::{ButtonScheme, Settings, SETTINGS_PATH, RotationLock, IntermKind};
 use crate::frontlight::{Frontlight, StandardFrontlight, NaturalFrontlight, PremixedFrontlight};
 use crate::lightsensor::{LightSensor, KoboLightSensor};
 use crate::battery::{Battery, KoboBattery};
@@ -43,7 +43,7 @@ use crate::view::reader::Reader;
 use crate::view::dialog::Dialog;
 use crate::view::home::Home;
 use crate::view::overlay::about::About;
-use crate::view::intermission::{Intermission, IntermKind};
+use crate::view::intermission::Intermission;
 use crate::view::notification::Notification;
 use crate::device::{CURRENT_DEVICE, Orientation, FrontlightKind};
 use crate::library::Library;
@@ -107,16 +107,14 @@ impl Context {
     }
 
     pub fn batch_import(&mut self) {
-        let prefix = self.library.home.clone();
-        let import_settings = self.settings.import.clone();
-        self.library.import(&prefix, &import_settings);
+        self.library.import(&self.settings.import);
         let selected_library = self.settings.selected_library;
         for (index, library_settings) in self.settings.libraries.iter().enumerate() {
             if index == selected_library {
                 continue;
             }
             let mut library = Library::new(&library_settings.path, library_settings.mode);
-            library.import(&library_settings.path, &import_settings);
+            library.import(&self.settings.import);
             library.flush();
         }
     }
@@ -173,7 +171,7 @@ impl Context {
         }
 
         let history = self.input_history.entry(id)
-                          .or_insert_with(|| VecDeque::new());
+                          .or_insert_with(VecDeque::new);
 
         if history.front().map(String::as_str) != Some(text) {
             history.push_front(text.to_string());
@@ -226,21 +224,15 @@ struct HistoryItem {
 
 fn build_context(fb: Box<dyn Framebuffer>) -> Result<Context, Error> {
     let rtc = Rtc::new(RTC_DEVICE)
-                  .map_err(|e| eprintln!("Can't open RTC device: {}", e))
+                  .map_err(|e| eprintln!("Can't open RTC device: {:#}.", e))
                   .ok();
     let path = Path::new(SETTINGS_PATH);
-    let settings = load_toml::<Settings, _>(path);
-
-    if let Err(ref e) = settings {
-        if path.exists() {
-            eprintln!("Can't load settings: {}", e);
-        }
-    }
-
-    let mut settings = settings.unwrap_or_default();
+    let mut settings = load_toml::<Settings, _>(path)
+                                .map_err(|e| eprintln!("Can't load settings: {:#}.", e))
+                                .unwrap_or_default();
 
     if settings.libraries.is_empty() {
-        return Err(format_err!("No libraries found."));
+        return Err(format_err!("no libraries found"));
     }
 
     if settings.selected_library >= settings.libraries.len() {
@@ -250,12 +242,12 @@ fn build_context(fb: Box<dyn Framebuffer>) -> Result<Context, Error> {
     let library_settings = &settings.libraries[settings.selected_library];
     let library = Library::new(&library_settings.path, library_settings.mode);
 
-    let fonts = Fonts::load().context("Can't load fonts.")?;
+    let fonts = Fonts::load().context("can't load fonts")?;
 
-    let battery = Box::new(KoboBattery::new().context("Can't create battery.")?) as Box<dyn Battery>;
+    let battery = Box::new(KoboBattery::new().context("can't create battery")?) as Box<dyn Battery>;
 
     let lightsensor = if CURRENT_DEVICE.has_lightsensor() {
-        Box::new(KoboLightSensor::new().context("Can't create light sensor.")?) as Box<dyn LightSensor>
+        Box::new(KoboLightSensor::new().context("can't create light sensor")?) as Box<dyn LightSensor>
     } else {
         Box::new(0u16) as Box<dyn LightSensor>
     };
@@ -263,11 +255,11 @@ fn build_context(fb: Box<dyn Framebuffer>) -> Result<Context, Error> {
     let levels = settings.frontlight_levels;
     let frontlight = match CURRENT_DEVICE.frontlight_kind() {
         FrontlightKind::Standard => Box::new(StandardFrontlight::new(levels.intensity)
-                                        .context("Can't create standard frontlight.")?) as Box<dyn Frontlight>,
+                                        .context("can't create standard frontlight")?) as Box<dyn Frontlight>,
         FrontlightKind::Natural => Box::new(NaturalFrontlight::new(levels.intensity, levels.warmth)
-                                        .context("Can't create natural frontlight.")?) as Box<dyn Frontlight>,
+                                        .context("can't create natural frontlight")?) as Box<dyn Frontlight>,
         FrontlightKind::Premixed => Box::new(PremixedFrontlight::new(levels.intensity, levels.warmth)
-                                        .context("Can't create premixed frontlight.")?) as Box<dyn Frontlight>,
+                                        .context("can't create premixed frontlight")?) as Box<dyn Frontlight>,
     };
 
     Ok(Context::new(fb, rtc, library, settings,
@@ -350,10 +342,10 @@ enum ExitStatus {
 pub fn run() -> Result<(), Error> {
     let mut inactive_since = Instant::now();
     let mut exit_status = ExitStatus::Quit;
-    let mut fb = KoboFramebuffer::new(FB_DEVICE).context("Can't create framebuffer.")?;
+    let mut fb = KoboFramebuffer::new(FB_DEVICE).context("can't create framebuffer")?;
     let initial_rotation = CURRENT_DEVICE.transformed_rotation(fb.rotation());
     let startup_rotation = CURRENT_DEVICE.startup_rotation();
-    if initial_rotation != startup_rotation {
+    if !CURRENT_DEVICE.has_gyroscope() && initial_rotation != startup_rotation {
         fb.set_rotation(startup_rotation).ok();
     }
 
@@ -467,6 +459,7 @@ pub fn run() -> Result<(), Error> {
                         } else if tasks.iter().any(|task| task.id == TaskId::Suspend) {
                             resume(TaskId::Suspend, &mut tasks, view.as_mut(), &tx, &mut rq, &mut context);
                         } else {
+                            view.handle_event(&Event::Suspend, &tx, &mut bus, &mut rq, &mut context);
                             let interm = Intermission::new(context.fb.rect(), IntermKind::Suspend, &context);
                             rq.add(RenderData::new(interm.id(), *interm.rect(), UpdateMode::Full));
                             schedule_task(TaskId::PrepareSuspend, Event::PrepareSuspend,
@@ -494,6 +487,7 @@ pub fn run() -> Result<(), Error> {
                             continue;
                         }
 
+                        view.handle_event(&Event::Suspend, &tx, &mut bus, &mut rq, &mut context);
                         let interm = Intermission::new(context.fb.rect(), IntermKind::Suspend, &context);
                         rq.add(RenderData::new(interm.id(), *interm.rect(), UpdateMode::Full));
                         schedule_task(TaskId::PrepareSuspend, Event::PrepareSuspend,
@@ -533,8 +527,7 @@ pub fn run() -> Result<(), Error> {
                         let essid = Command::new("scripts/essid.sh").output()
                                             .map(|o| String::from_utf8_lossy(&o.stdout).trim_end().to_string())
                                             .unwrap_or_default();
-                        let notif = Notification::new(ViewId::NetUpNotif,
-                                                      format!("Network is up ({}, {}).", ip, essid),
+                        let notif = Notification::new(format!("Network is up ({}, {}).", ip, essid),
                                                       &tx, &mut rq, &mut context);
                         context.online = true;
                         view.children_mut().push(Box::new(notif) as Box<dyn View>);
@@ -600,11 +593,11 @@ pub fn run() -> Result<(), Error> {
                             context.shared = false;
                             Command::new("scripts/usb-disable.sh").status().ok();
                             env::set_current_dir(&current_dir)
-                                .map_err(|e| eprintln!("Unable to set current directory to {}: {}", current_dir.display(), e))
+                                .map_err(|e| eprintln!("Can't set current directory to {}: {:#}.", current_dir.display(), e))
                                 .ok();
                             let path = Path::new(SETTINGS_PATH);
                             if let Ok(settings) = load_toml::<Settings, _>(path)
-                                                            .map_err(|e| eprintln!("Can't load settings: {}", e)) {
+                                                            .map_err(|e| eprintln!("Can't load settings: {:#}.", e)) {
                                 context.settings = settings;
                             }
                             if context.settings.wifi {
@@ -685,8 +678,7 @@ pub fn run() -> Result<(), Error> {
                         exit_status = ExitStatus::PowerOff;
                         break;
                     } else if v < context.settings.battery.warn {
-                        let notif = Notification::new(ViewId::LowBatteryNotif,
-                                                      "The battery capacity is getting low.".to_string(),
+                        let notif = Notification::new("The battery capacity is getting low.".to_string(),
                                                       &tx, &mut rq, &mut context);
                         view.children_mut().push(Box::new(notif) as Box<dyn View>);
                     }
@@ -697,7 +689,7 @@ pub fn run() -> Result<(), Error> {
                 updating.retain(|tok, _| context.fb.wait(*tok).is_err());
                 let path = Path::new(SETTINGS_PATH);
                 update_session(&mut context);
-                save_toml(&context.settings, path).map_err(|e| eprintln!("Can't save settings: {}", e)).ok();
+                save_toml(&context.settings, path).map_err(|e| eprintln!("Can't save settings: {:#}.", e)).ok();
                 context.library.flush();
 
                 if context.settings.frontlight {
@@ -719,7 +711,7 @@ pub fn run() -> Result<(), Error> {
                 if context.settings.auto_power_off > 0 {
                     context.rtc.iter().for_each(|rtc| {
                         rtc.set_alarm(context.settings.auto_power_off)
-                           .map_err(|e| eprintln!("Can't set alarm: {}.", e))
+                           .map_err(|e| eprintln!("Can't set alarm: {:#}.", e))
                            .ok();
                     });
                 }
@@ -735,12 +727,12 @@ pub fn run() -> Result<(), Error> {
                 if context.settings.auto_power_off > 0 {
                     if let Some(enabled) = context.rtc.as_ref()
                                                   .and_then(|rtc| rtc.is_alarm_enabled()
-                                                                     .map_err(|e| eprintln!("Can't get alarm: {}", e))
+                                                                     .map_err(|e| eprintln!("Can't get alarm: {:#}", e))
                                                                      .ok()) {
                         if enabled {
                             context.rtc.iter().for_each(|rtc| {
                                 rtc.disable_alarm()
-                                   .map_err(|e| eprintln!("Can't disable alarm: {}.", e))
+                                   .map_err(|e| eprintln!("Can't disable alarm: {:#}.", e))
                                    .ok();
                             });
                         } else {
@@ -772,7 +764,8 @@ pub fn run() -> Result<(), Error> {
                 }
                 let path = Path::new(SETTINGS_PATH);
                 update_session(&mut context);
-                save_toml(&context.settings, path).map_err(|e| eprintln!("Can't save settings: {}", e)).ok();
+                save_toml(&context.settings, path)
+                         .map_err(|e| eprintln!("Can't save settings: {:#}.", e)).ok();
                 context.library.flush();
 
                 if context.settings.frontlight {
@@ -786,6 +779,7 @@ pub fn run() -> Result<(), Error> {
                             .ok();
                     context.online = false;
                 }
+
                 let interm = Intermission::new(context.fb.rect(), IntermKind::Share, &context);
                 rq.add(RenderData::new(interm.id(), *interm.rect(), UpdateMode::Full));
                 view.children_mut().push(Box::new(interm) as Box<dyn View>);
@@ -1079,15 +1073,6 @@ pub fn run() -> Result<(), Error> {
                 context.fb.toggle_dithered();
                 rq.add(RenderData::new(view.id(), context.fb.rect(), UpdateMode::Full));
             },
-            Event::Select(EntryId::ToggleIntermissionImage(ref kind, ref path)) => {
-                let full_path = context.library.home.join(path);
-                let key = kind.key();
-                if context.settings.intermission_images.get(key) == Some(&full_path) {
-                    context.settings.intermission_images.remove(key);
-                } else {
-                    context.settings.intermission_images.insert(key.to_string(), full_path);
-                }
-            },
             Event::Select(EntryId::Rotate(n)) if n != context.display.rotation && view.might_rotate() => {
                 updating.retain(|tok, _| context.fb.wait(*tok).is_err());
                 if let Ok(dims) = context.fb.set_rotation(n) {
@@ -1131,23 +1116,20 @@ pub fn run() -> Result<(), Error> {
                     Err(e) => format!("{}", e),
                     Ok(_) => format!("Saved {}.", name),
                 };
-                let notif = Notification::new(ViewId::TakeScreenshotNotif,
-                                              msg, &tx, &mut rq, &mut context);
+                let notif = Notification::new(msg, &tx, &mut rq, &mut context);
                 view.children_mut().push(Box::new(notif) as Box<dyn View>);
             },
             Event::CheckFetcher(..) |
             Event::FetcherAddDocument(..) |
-            Event::FetcherSearch { .. } |
-            Event::FetcherCleanUp(..) |
-            Event::FetcherImport(..) if !view.is::<Works>() => {
+            Event::FetcherRemoveDocument(..) |
+            Event::FetcherSearch { .. } if !view.is::<Works>() => {
                 if let Some(entry) = history.get_mut(0).filter(|entry| entry.view.is::<Works>()) {
                     let (tx, _rx) = mpsc::channel();
                     entry.view.handle_event(&evt, &tx, &mut VecDeque::new(), &mut RenderQueue::new(), &mut context);
                 }
             },
             Event::Notify(msg) => {
-                let notif = Notification::new(ViewId::MessageNotif,
-                                              msg, &tx, &mut rq, &mut context);
+                let notif = Notification::new(msg, &tx, &mut rq, &mut context);
                 view.children_mut().push(Box::new(notif) as Box<dyn View>);
             },
             // Event::ShowOverlay(data) => {
@@ -1163,7 +1145,7 @@ pub fn run() -> Result<(), Error> {
             },
             Event::Select(EntryId::RebootInNickel) => {
                 fs::remove_file("bootlock").map_err(|e| {
-                    eprintln!("Couldn't remove the bootlock file: {}", e);
+                    eprintln!("Couldn't remove the bootlock file: {:#}.", e);
                 }).ok();
                 exit_status = ExitStatus::Reboot;
                 break;
@@ -1176,6 +1158,7 @@ pub fn run() -> Result<(), Error> {
                 }
                 let seconds = 60 * context.settings.auto_suspend as u64;
                 if inactive_since.elapsed() > Duration::from_secs(seconds) {
+                    view.handle_event(&Event::Suspend, &tx, &mut bus, &mut rq, &mut context);
                     let interm = Intermission::new(context.fb.rect(), IntermKind::Suspend, &context);
                     rq.add(RenderData::new(interm.id(), *interm.rect(), UpdateMode::Full));
                     schedule_task(TaskId::PrepareSuspend, Event::PrepareSuspend,
@@ -1216,7 +1199,7 @@ pub fn run() -> Result<(), Error> {
         }
     }
 
-    if context.display.rotation != initial_rotation {
+    if !CURRENT_DEVICE.has_gyroscope() && context.display.rotation != initial_rotation {
         context.fb.set_rotation(initial_rotation).ok();
     }
 
