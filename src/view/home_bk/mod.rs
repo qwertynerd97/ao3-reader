@@ -1598,21 +1598,6 @@ impl View for Home {
                 }
                 true
             },
-<<<<<<< HEAD:src/view/home_bk/mod.rs
-            // Event::Submit(ViewId::GoToPageInput, ref text) => {
-            //     if text == "(" {
-            //         self.go_to_page(0, hub, rq, context);
-            //     } else if text == ")" {
-            //         self.go_to_page(self.pages_count.saturating_sub(1), hub, rq, context);
-            //     } else if text == "_" {
-            //         let index = (context.rng.next_u64() % self.pages_count as u64) as usize;
-            //         self.go_to_page(index, hub, rq, context);
-            //     } else if let Ok(index) = text.parse::<usize>() {
-            //         self.go_to_page(index.saturating_sub(1), hub, rq, context);
-            //     }
-            //     true
-            // },
-=======
             Event::Submit(ViewId::GoToPageInput, ref text) => {
                 if text == "(" {
                     self.go_to_page(0, hub, rq, context);
@@ -1634,7 +1619,6 @@ impl View for Home {
                 }
                 true
             },
->>>>>>> upstream-master:src/view/home/mod.rs
             Event::NavigationBarResized(_) => {
                 self.adjust_shelf_top_edge();
                 self.update_shelf(true, hub, rq, context);

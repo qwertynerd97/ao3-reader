@@ -473,8 +473,7 @@ pub fn run() -> Result<(), Error> {
                             Err(e) => format!("{}", e),
                             Ok(_) => format!("Saved {}.", name),
                         };
-                        let notif = Notification::new(ViewId::TakeScreenshotNotif,
-                                                      msg, &tx, &mut rq, &mut context);
+                        let notif = Notification::new(msg, &tx, &mut rq, &mut context);
                         view.children_mut().push(Box::new(notif) as Box<dyn View>);
                         //tx.send(Event::ToggleFrontlight).ok();
                     },
@@ -949,15 +948,13 @@ pub fn run() -> Result<(), Error> {
                             StatusCode::MOVED_PERMANENTLY => {
                                 // TODO: change this when we can look at tag pages
                                 let msg = format!("Unwrangled tag! No works available.");
-                                let notif = Notification::new(ViewId::MessageNotif,
-                                    msg, &tx, &mut rq, &mut context);
+                                let notif = Notification::new(msg, &tx, &mut rq, &mut context);
                                 view.children_mut().push(Box::new(notif) as Box<dyn View>);
                             },
                             _ => {
                                 println!("Got {} for {}", r.status(), link_uri);
                                 let msg = format!("Error: {}", r.status());
-                                let notif = Notification::new(ViewId::MessageNotif,
-                                    msg, &tx, &mut rq, &mut context);
+                                let notif = Notification::new(msg, &tx, &mut rq, &mut context);
                                 view.children_mut().push(Box::new(notif) as Box<dyn View>);
                             }
                         }
@@ -965,8 +962,7 @@ pub fn run() -> Result<(), Error> {
                     Err(e) => {
                         println!("Error fetching {} - {}", link_uri, e);
                         let msg = format!("Error: {}", e);
-                        let notif = Notification::new(ViewId::MessageNotif,
-                            msg, &tx, &mut rq, &mut context);
+                        let notif = Notification::new(msg, &tx, &mut rq, &mut context);
                         view.children_mut().push(Box::new(notif) as Box<dyn View>);
                     }
                 };

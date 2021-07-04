@@ -441,6 +441,16 @@ impl Document for Ao3Document {
         scrape_csrf(&self.parsed_doc)
     }
 
+    fn set_hyphen_penalty(&mut self, hyphen_penalty: i32) {
+        self.engine.set_hyphen_penalty(hyphen_penalty);
+        self.pages.clear();
+    }
+
+    fn set_stretch_tolerance(&mut self, stretch_tolerance: f32) {
+        self.engine.set_stretch_tolerance(stretch_tolerance);
+        self.pages.clear();
+    }
+
     fn work_id(&self) -> String {
         let mut work_id = "".to_string();
         if let Some(unwrapped_url) = &self.url {

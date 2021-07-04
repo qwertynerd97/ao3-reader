@@ -480,28 +480,31 @@ impl Works {
     // }
 
     fn remove(&mut self, path: &Path, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) -> Result<(), Error> {
-        let trash_path = context.library.home.join(TRASH_DIRNAME);
-        if !trash_path.is_dir() {
-            fs::create_dir_all(&trash_path)?;
-        }
-        let mut trash = Library::new(trash_path, LibraryMode::Database);
-        context.library.move_to(path, &mut trash)?;
         let full_path = context.library.home.join(path);
-        context.settings.intermission_images.retain(|_, path| path != &full_path);
-        let (mut files, _) = trash.list(&trash.home, None, false);
-        let mut size = files.iter().map(|info| info.file.size).sum::<u64>();
-        if size > context.settings.home.max_trash_size {
-            sort(&mut files, SortMethod::Added, true);
-            while size > context.settings.home.max_trash_size {
-                let info = files.pop().unwrap();
-                if let Err(e) = trash.remove(&info.file.path) {
-                    eprintln!("{}", e);
-                    break;
-                }
-                size -= info.file.size;
+        if full_path.exists() {
+            let trash_path = context.library.home.join(TRASH_DIRNAME);
+            if !trash_path.is_dir() {
+                fs::create_dir_all(&trash_path)?;
             }
+            let mut trash = Library::new(trash_path, LibraryMode::Database);
+            context.library.move_to(path, &mut trash)?;
+            let (mut files, _) = trash.list(&trash.home, None, false);
+            let mut size = files.iter().map(|info| info.file.size).sum::<u64>();
+            if size > context.settings.home.max_trash_size {
+                sort(&mut files, SortMethod::Added, true);
+                while size > context.settings.home.max_trash_size {
+                    let info = files.pop().unwrap();
+                    if let Err(e) = trash.remove(&info.file.path) {
+                        eprintln!("Can't erase {}: {:#}", info.file.path.display(), e);
+                        break;
+                    }
+                    size -= info.file.size;
+                }
+            }
+            trash.flush();
+        } else {
+            context.library.remove(path)?;
         }
-        trash.flush();
         self.refresh_visibles(true, false, hub, rq, context);
         Ok(())
     }
@@ -672,8 +675,7 @@ impl View for Works {
                     }
                     self.refresh_visibles(true, true, hub, rq, context);
                 } else {
-                    let notif = Notification::new(ViewId::InvalidSearchQueryNotif,
-                                                  "Invalid search query.".to_string(),
+                    let notif = Notification::new("Invalid search query.".to_string(),
                                                   hub,
                                                   rq,
                                                   context);
