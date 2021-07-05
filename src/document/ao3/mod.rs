@@ -85,8 +85,10 @@ impl Ao3Document {
         let document = scraper::Html::parse_document(&text);
         let body_selector = scraper::Selector::parse("#workskin").unwrap();
         let body_text = document.select(&body_selector).next().unwrap().inner_html();
-        let size = body_text.len();
-        let mut content = XmlParser::new(&body_text).parse();
+        let re = Regex::new(r"<br>").unwrap();
+        let fixed = re.replace_all(&body_text, "<br />");
+        let size = fixed.len();
+        let mut content = XmlParser::new(&fixed).parse();
         content.wrap_lost_inlines();
 
         let mut id = "0".to_string(); 
