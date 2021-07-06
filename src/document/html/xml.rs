@@ -88,9 +88,17 @@ impl<'a> XmlParser<'a> {
                 nodes.push(element(name, offset - 1, attributes, Vec::new()));
             },
             Some('>') => {
-                self.advance(1);
-                let children = self.parse_nodes();
-                nodes.push(element(name, offset - 1, attributes, children));
+                match name {
+                    "area"|"base"|"br"|"col"|"command"|"embed"|"hr"|"img"|"input"|"keygen"|"link"|"meta"|"param"|"source"|"track"|"wbr" => {
+                        self.advance(1);
+                        nodes.push(element(name, offset - 1, attributes, Vec::new()));
+                    },
+                    _ => {
+                        self.advance(1);
+                        let children = self.parse_nodes();
+                        nodes.push(element(name, offset - 1, attributes, children));
+                    }
+                }
             }
             _ => (),
         }

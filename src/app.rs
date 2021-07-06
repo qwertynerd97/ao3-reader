@@ -353,7 +353,7 @@ pub fn run() -> Result<(), Error> {
     set_wifi(true, &mut context);
     context.client.test_login();
     // if !context.client.test_login() {
-    //     context.client.login("momijizukamori", "magus256");
+    //     context.client.login("momijizukamori", "");
     // }
     if context.settings.import.startup_trigger {
         context.batch_import();
