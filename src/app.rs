@@ -426,7 +426,6 @@ pub fn run() -> Result<(), Error> {
     let mut tasks: Vec<Task> = Vec::new();
     let mut history: Vec<HistoryItem> = Vec::new();
     let mut rq = RenderQueue::new();
-    let base_path = &context.settings.ao3.base_path;
     let mut view: Box<dyn View> = Box::new(Home::new(context.fb.rect(), &mut rq, &mut context));
     // let mut view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), base_path.to_string(), &tx,
     //                                                  &mut rq, &mut context)?);
@@ -468,14 +467,17 @@ pub fn run() -> Result<(), Error> {
                         }
                     },
                     DeviceEvent::Button { code: ButtonCode::Light, status: ButtonStatus::Pressed, .. } => {
-                        let name = Local::now().format("screenshot-%Y%m%d_%H%M%S.png");
-                        let msg = match context.fb.save(&name.to_string()) {
-                            Err(e) => format!("{}", e),
-                            Ok(_) => format!("Saved {}.", name),
-                        };
-                        let notif = Notification::new(msg, &tx, &mut rq, &mut context);
-                        view.children_mut().push(Box::new(notif) as Box<dyn View>);
-                        //tx.send(Event::ToggleFrontlight).ok();
+                        if context.settings.ao3.screenshot_button {
+                            let name = Local::now().format("screenshot-%Y%m%d_%H%M%S.png");
+                            let msg = match context.fb.save(&name.to_string()) {
+                                Err(e) => format!("{}", e),
+                                Ok(_) => format!("Saved {}.", name),
+                            };
+                            let notif = Notification::new(msg, &tx, &mut rq, &mut context);
+                            view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                        } else {
+                            tx.send(Event::ToggleFrontlight).ok();
+                        }
                     },
                     DeviceEvent::CoverOn => {
                         context.covered = true;

@@ -10,9 +10,9 @@ pub struct Ao3Settings {
     pub remember_username: bool,
     pub username: Option<String>,
     pub login_cookie: Option<String>,
-    pub base_path: String,
     pub faves: Vec<(String, Url)>,
-    pub work_display: WorkView
+    pub work_display: WorkView,
+    pub screenshot_button: bool
 }
 
 impl Ao3Settings {
@@ -45,9 +45,9 @@ impl Default for Ao3Settings {
             remember_username: false,
             username: None,
             login_cookie: None,
-            base_path: "".to_string(),
             faves: Vec::new(),
-            work_display: WorkView::Short
+            work_display: WorkView::Short,
+            screenshot_button: false
         }
     }
 }
