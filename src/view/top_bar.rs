@@ -49,8 +49,8 @@ impl TopBar {
         children.push(Box::new(title_label) as Box<dyn View>);
         children.push(Box::new(clock_label) as Box<dyn View>);
 
-        let capacity = context.battery.capacity().unwrap_or(0.0);
-        let status = context.battery.status().unwrap_or(crate::battery::Status::Discharging);
+        let capacity = context.battery.capacity().map_or(0.0, |v| v[0]);
+        let status = context.battery.status().map_or(crate::battery::Status::Discharging, |v| v[0]);
         let battery_widget = Battery::new(rect![rect.max - pt!(3*side, side),
                                                 rect.max - pt!(2*side, 0)],
                                           capacity,
@@ -100,6 +100,24 @@ impl TopBar {
         let icon = self.child_mut(4).downcast_mut::<Icon>().unwrap();
         icon.name = name.to_string();
         rq.add(RenderData::new(icon.id(), *icon.rect(), UpdateMode::Gui));
+    }
+
+    pub fn update_clock_label(&mut self, rq: &mut RenderQueue) {
+        if let Some(clock_label) = self.children[2].downcast_mut::<Clock>() {
+            clock_label.update(rq);
+        }
+    }
+
+    pub fn update_battery_widget(&mut self, rq: &mut RenderQueue, context: &mut Context) {
+        if let Some(battery_widget) = self.children[3].downcast_mut::<Battery>() {
+            battery_widget.update(rq, context);
+        }
+    }
+
+    pub fn reseed(&mut self, rq: &mut RenderQueue, context: &mut Context) {
+        self.update_frontlight_icon(rq, context);
+        self.update_clock_label(rq);
+        self.update_battery_widget(rq, context);
     }
 }
 

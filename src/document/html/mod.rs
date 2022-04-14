@@ -15,12 +15,13 @@ use crate::framebuffer::Pixmap;
 use crate::helpers::{Normalize, decode_entities};
 use crate::document::{Document, Location, TextLocation, TocEntry, BoundedText};
 use crate::unit::pt_to_px;
-use crate::geom::{Rectangle, Edge, CycleDir};
-use self::dom::Node;
+use crate::geom::{Boundary, Edge, CycleDir};
+use self::dom::{XmlTree, NodeRef};
 use self::layout::{RootData, StyleData, DrawState, LoopContext};
 use self::layout::{DrawCommand, TextCommand, ImageCommand, TextAlign};
 use self::engine::{Page, Engine, ResourceFetcher};
-use self::css::{CssParser, RuleKind};
+use self::style::StyleSheet;
+use self::css::CssParser;
 use self::xml::XmlParser;
 
 const VIEWER_STYLESHEET: &str = "css/html.css";
@@ -31,7 +32,7 @@ type UriCache = FxHashMap<String, usize>;
 #[derive(Clone)]
 pub struct HtmlDocument {
     text: String,
-    content: Node,
+    content: XmlTree,
     engine: Engine,
     pages: Vec<Page>,
     parent: PathBuf,
@@ -146,7 +147,7 @@ impl HtmlDocument {
         let frag_index = uri.find('#')?;
         let name = &uri[..frag_index];
         let content = self.content.clone();
-        self.cache_uris(&content, name, cache);
+        self.cache_uris(content.root(), name, cache);
         cache.get(uri).cloned()
     }
 
@@ -158,63 +159,49 @@ impl HtmlDocument {
         if let Some(id) = node.attr("id") {
             cache.insert(format!("{}#{}", name, id), node.offset());
         }
-        if let Some(children) = node.children() {
-            for child in children {
-                self.cache_uris(child, name, cache);
-            }
+        for child in node.children() {
+            self.cache_uris(child, name, cache);
         }
-    }
-
-    fn images(&mut self, loc: Location) -> Option<(Vec<Rectangle>, usize)> {
-        let offset = self.resolve_location(loc)?;
-        let page_index = self.page_index(offset)?;
-
-        Some((self.pages[page_index].iter().filter_map(|dc| {
-            match dc {
-                DrawCommand::Image(ImageCommand { rect, .. }) => Some(*rect),
-                _ => None,
-            }
-        }).collect(), offset))
     }
 
     fn build_pages(&mut self) -> Vec<Page> {
-        let mut stylesheet = Vec::new();
+        let mut stylesheet = StyleSheet::new();
         let spine_dir = PathBuf::default();
 
         if let Ok(text) = fs::read_to_string(&self.viewer_stylesheet) {
-            let (mut css, _) = CssParser::new(&text).parse(RuleKind::Viewer);
-            stylesheet.append(&mut css);
+            let mut css = CssParser::new(&text).parse();
+            stylesheet.append(&mut css, true);
         }
 
         if let Ok(text) = fs::read_to_string(&self.user_stylesheet) {
-            let (mut css, _) = CssParser::new(&text).parse(RuleKind::User);
-            stylesheet.append(&mut css);
+            let mut css = CssParser::new(&text).parse();
+            stylesheet.append(&mut css, true);
         }
 
         if !self.ignore_document_css {
-            if let Some(head) = self.content.find("head") {
-                if let Some(children) = head.children() {
-                    for child in children {
-                        if child.tag_name() == Some("link") && child.attr("rel") == Some("stylesheet") {
-                            if let Some(href) = child.attr("href") {
-                                if let Some(name) = spine_dir.join(href).normalize().to_str() {
-                                    if let Ok(buf) = self.parent.fetch(name) {
-                                        if let Ok(text) = String::from_utf8(buf) {
-                                            let (mut css, _) = CssParser::new(&text).parse(RuleKind::Document);
-                                            stylesheet.append(&mut css);
-                                        }
+            let mut inner_css = StyleSheet::new();
+
+            if let Some(head) = self.content.root().find("head") {
+                for child in head.children() {
+                    if child.tag_name() == Some("link") && child.attribute("rel") == Some("stylesheet") {
+                        if let Some(href) = child.attribute("href") {
+                            if let Some(name) = spine_dir.join(href).normalize().to_str() {
+                                if let Ok(buf) = self.parent.fetch(name) {
+                                    if let Ok(text) = String::from_utf8(buf) {
+                                        let mut css = CssParser::new(&text).parse();
+                                        inner_css.append(&mut css, false);
                                     }
                                 }
                             }
-                        } else if child.tag_name() == Some("style") && child.attr("type") == Some("text/css") {
-                            if let Some(text) = child.text() {
-                                let (mut css, _) = CssParser::new(text).parse(RuleKind::Document);
-                                stylesheet.append(&mut css);
-                            }
                         }
+                    } else if child.tag_name() == Some("style") && child.attribute("type") == Some("text/css") {
+                        let mut css = CssParser::new(&child.text()).parse();
+                        inner_css.append(&mut css, false);
                     }
                 }
             }
+
+            stylesheet.append(&mut inner_css, true);
         }
 
         let mut pages = Vec::new();
@@ -222,8 +209,9 @@ impl HtmlDocument {
         let mut rect = self.engine.rect();
         rect.shrink(&self.engine.margin);
 
-        let language = self.content.find("html")
-                           .and_then(|html| html.attr("xml:lang"))
+        let language = self.content.root()
+                           .find("html")
+                           .and_then(|html| html.attribute("xml:lang"))
                            .map(String::from);
 
         let style = StyleData {
@@ -251,12 +239,12 @@ impl HtmlDocument {
 
         pages.push(Vec::new());
 
-        self.engine.build_display_list(&self.content, &style, &loop_context, &stylesheet, &root_data, &mut self.parent, &mut draw_state, &mut pages);
+        self.engine.build_display_list(self.content.root(), &style, &loop_context, &stylesheet, &root_data, &mut self.parent, &mut draw_state, &mut pages);
 
         pages.retain(|page| !page.is_empty());
 
         if pages.is_empty() {
-            pages.push(vec![DrawCommand::Marker(self.content.offset())]);
+            pages.push(vec![DrawCommand::Marker(self.content.root().offset())]);
         }
 
         pages
@@ -271,8 +259,9 @@ impl HtmlDocument {
     }
 
     pub fn language(&self) -> Option<String> {
-        self.content.find("html")
-            .and_then(|html| html.attr("xml:lang"))
+        self.content.root()
+            .find("html")
+            .and_then(|html| html.attribute("xml:lang"))
             .map(String::from)
     }
 
@@ -295,7 +284,7 @@ impl Document for HtmlDocument {
         None
     }
 
-    fn chapter<'a>(&mut self, _offset: usize, _toc: &'a [TocEntry]) -> Option<&'a TocEntry> {
+    fn chapter<'a>(&mut self, _offset: usize, _toc: &'a [TocEntry]) -> Option<(&'a TocEntry, f32)> {
         None
     }
 
@@ -358,6 +347,18 @@ impl Document for HtmlDocument {
         None
     }
 
+    fn images(&mut self, loc: Location) -> Option<(Vec<Boundary>, usize)> {
+        let offset = self.resolve_location(loc)?;
+        let page_index = self.page_index(offset)?;
+
+        Some((self.pages[page_index].iter().filter_map(|dc| {
+            match dc {
+                DrawCommand::Image(ImageCommand { rect, .. }) => Some((*rect).into()),
+                _ => None,
+            }
+        }).collect(), offset))
+    }
+
     fn links(&mut self, loc: Location) -> Option<(Vec<BoundedText>, usize)> {
         let offset = self.resolve_location(loc)?;
         let page_index = self.page_index(offset)?;
@@ -381,7 +382,7 @@ impl Document for HtmlDocument {
         let offset = self.resolve_location(loc)?;
         let page_index = self.page_index(offset)?;
         let page = self.pages[page_index].clone();
-        let pixmap = self.engine.render_page(&page, scale, &mut self.parent);
+        let pixmap = self.engine.render_page(&page, scale, &mut self.parent)?;
 
         Some((pixmap, offset))
     }
@@ -421,12 +422,16 @@ impl Document for HtmlDocument {
         self.pages.clear();
     }
 
+    fn set_ignore_document_css(&mut self, ignore: bool) {
+        self.ignore_document_css = ignore;
+        self.pages.clear();
+    }
+
     fn title(&self) -> Option<String> {
-        self.content.find("head")
-            .and_then(Node::children)
-            .and_then(|children| children.iter().find(|child| child.tag_name() == Some("title")))
-            .and_then(|child| child.children().and_then(|c| c.get(0)))
-            .and_then(|child| child.text().map(|s| decode_entities(s).into_owned()))
+        self.content.root()
+            .find("head")
+            .and_then(|head| head.children().find(|child| child.tag_name() == Some("title")))
+            .map(|child| decode_entities(&child.text()).into_owned())
     }
 
     fn author(&self) -> Option<String> {
@@ -434,10 +439,10 @@ impl Document for HtmlDocument {
     }
 
     fn metadata(&self, key: &str) -> Option<String> {
-        self.content.find("head")
-            .and_then(Node::children)
-            .and_then(|children| children.iter().find(|child| child.tag_name() == Some("meta") && child.attr("name") == Some(key)))
-            .and_then(|child| child.attr("content").map(|s| decode_entities(s).into_owned()))
+        self.content.root()
+            .find("head")
+            .and_then(|head| head.children().find(|child| child.tag_name() == Some("meta") && child.attribute("name") == Some(key)))
+            .and_then(|child| child.attribute("content").map(|s| decode_entities(s).into_owned()))
     }
 
     fn save(&self, path: &str) -> Result<(), Error> {

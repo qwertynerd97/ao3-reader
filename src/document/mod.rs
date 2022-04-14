@@ -8,8 +8,10 @@ mod mupdf_sys;
 use std::env;
 use std::process::Command;
 use std::path::Path;
+use std::fs::File;
 use std::ffi::OsStr;
 use std::collections::BTreeSet;
+use std::os::unix::fs::FileExt;
 use anyhow::{Error, format_err};
 use regex::Regex;
 use nix::sys::statvfs;
@@ -99,11 +101,12 @@ pub trait Document: Send+Sync {
     fn pages_count(&self) -> usize;
 
     fn toc(&mut self) -> Option<Vec<TocEntry>>;
-    fn chapter<'a>(&mut self, offset: usize, toc: &'a [TocEntry]) -> Option<&'a TocEntry>;
+    fn chapter<'a>(&mut self, offset: usize, toc: &'a [TocEntry]) -> Option<(&'a TocEntry, f32)>;
     fn chapter_relative<'a>(&mut self, offset: usize, dir: CycleDir, toc: &'a [TocEntry]) -> Option<&'a TocEntry>;
     fn words(&mut self, loc: Location) -> Option<(Vec<BoundedText>, usize)>;
     fn lines(&mut self, loc: Location) -> Option<(Vec<BoundedText>, usize)>;
     fn links(&mut self, loc: Location) -> Option<(Vec<BoundedText>, usize)>;
+    fn images(&mut self, loc: Location) -> Option<(Vec<Boundary>, usize)>;
 
     fn pixmap(&mut self, loc: Location, scale: f32) -> Option<(Pixmap, usize)>;
     fn layout(&mut self, width: u32, height: u32, font_size: f32, dpi: u16);
@@ -113,6 +116,7 @@ pub trait Document: Send+Sync {
     fn set_line_height(&mut self, line_height: f32);
     fn set_hyphen_penalty(&mut self, hyphen_penalty: i32);
     fn set_stretch_tolerance(&mut self, stretch_tolerance: f32);
+    fn set_ignore_document_css(&mut self, ignore: bool);
 
     fn title(&self) -> Option<String>;
     fn author(&self) -> Option<String>;
@@ -198,6 +202,29 @@ pub fn file_kind<P: AsRef<Path>>(path: P) -> Option<String> {
     path.as_ref().extension()
         .and_then(OsStr::to_str)
         .map(str::to_lowercase)
+        .or_else(|| guess_kind(path.as_ref())
+                              .ok()
+                              .map(String::from))
+}
+
+pub fn guess_kind<P: AsRef<Path>>(path: P) -> Result<&'static str, Error> {
+    let file = File::open(path.as_ref())?;
+    let mut magic = [0; 4];
+    file.read_exact_at(&mut magic, 0)?;
+
+    if &magic == b"PK\x03\x04" {
+        let mut mime_type = [0; 28];
+        file.read_exact_at(&mut mime_type, 30)?;
+        if &mime_type == b"mimetypeapplication/epub+zip" {
+            return Ok("epub");
+        }
+    } else if &magic == b"%PDF" {
+        return Ok("pdf");
+    } else if &magic == b"AT&T" {
+        return Ok("djvu");
+    }
+
+    Err(format_err!("Unknown file type"))
 }
 
 pub trait HumanSize {
@@ -284,11 +311,7 @@ pub fn toc_as_html(toc: &[TocEntry], chap_index: usize) -> String {
 
 pub fn toc_as_html_aux(toc: &[TocEntry], chap_index: usize, depth: usize, buf: &mut String) {
     buf.push_str(&"\t".repeat(depth + 2));
-    if depth == 0 {
-        buf.push_str("<ul class=\"top\">\n");
-    } else {
-        buf.push_str("<ul>\n");
-    }
+    buf.push_str("<ul>\n");
     for entry in toc {
         buf.push_str(&"\t".repeat(depth + 3));
         match entry.location {
@@ -359,28 +382,33 @@ pub fn bookmarks_as_html(bookmarks: &BTreeSet<usize>, index: usize, synthetic: b
 }
 
 #[inline]
-fn chapter(index: usize, toc: &[TocEntry]) -> Option<&TocEntry> {
+fn chapter(index: usize, pages_count: usize, toc: &[TocEntry]) -> Option<(&TocEntry, f32)> {
     let mut chap = None;
     let mut chap_index = 0;
-    chapter_aux(toc, index, &mut chap, &mut chap_index);
-    chap
+    let mut end_index = pages_count;
+    chapter_aux(toc, index, &mut chap, &mut chap_index, &mut end_index);
+    chap.zip(Some((index - chap_index) as f32 / (end_index - chap_index) as f32))
 }
 
-fn chapter_aux<'a>(toc: &'a [TocEntry], index: usize, chap: &mut Option<&'a TocEntry>, chap_index: &mut usize) {
+fn chapter_aux<'a>(toc: &'a [TocEntry], index: usize, chap: &mut Option<&'a TocEntry>,
+                   chap_index: &mut usize, end_index: &mut usize) {
     for entry in toc {
         if let Location::Exact(entry_index) = entry.location {
             if entry_index <= index && (chap.is_none() || entry_index > *chap_index) {
                 *chap = Some(entry);
                 *chap_index = entry_index;
             }
+            if entry_index > index && entry_index < *end_index {
+                *end_index = entry_index;
+            }
         }
-        chapter_aux(&entry.children, index, chap, chap_index);
+        chapter_aux(&entry.children, index, chap, chap_index, end_index);
     }
 }
 
 #[inline]
 fn chapter_relative(index: usize, dir: CycleDir, toc: &[TocEntry]) -> Option<&TocEntry> {
-    let chap = chapter(index, toc);
+    let chap = chapter(index, usize::MAX, toc).map(|(c, _)| c);
 
     match dir {
         CycleDir::Previous => previous_chapter(chap, index, toc),

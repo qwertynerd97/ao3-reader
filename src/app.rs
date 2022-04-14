@@ -1,4 +1,4 @@
-use std::fs;
+use std::fs::{self, File};
 use std::env;
 use std::thread;
 use std::process::Command;
@@ -17,9 +17,9 @@ use reqwest::blocking::{Client};
 use reqwest::redirect::{Policy};
 use reqwest::StatusCode;
 use crate::dictionary::{Dictionary, load_dictionary_from_file};
-use crate::framebuffer::{Framebuffer, KoboFramebuffer, Display, UpdateMode};
-use crate::view::{View, Event, EntryId, EntryKind, ViewId, AppCmd, RenderData, RenderQueue};
-use crate::view::{handle_event, process_render_queue};
+use crate::framebuffer::{Framebuffer, KoboFramebuffer1, KoboFramebuffer2, Display, UpdateMode};
+use crate::view::{View, Event, EntryId, EntryKind, ViewId, AppCmd, RenderData, RenderQueue, UpdateData};
+use crate::view::{handle_event, process_render_queue, wait_for_all};
 use crate::view::common::{locate, locate_by_id, transfer_notifications, overlapping_rectangle};
 use crate::view::common::{toggle_input_history_menu, toggle_keyboard_layout_menu};
 use crate::view::frontlight::FrontlightWindow;
@@ -54,8 +54,11 @@ use crate::rtc::Rtc;
 pub const APP_NAME: &str = "Plato";
 const FB_DEVICE: &str = "/dev/fb0";
 const RTC_DEVICE: &str = "/dev/rtc0";
-const EVENT_BUTTONS: &str = "/dev/input/event0";
-const EVENT_TOUCH_SCREEN: &str = "/dev/input/event1";
+const INPUT_EVENTS_A: [&str; 2] = ["/dev/input/event0",
+                                   "/dev/input/event1"];
+const INPUT_EVENTS_B: [&str; 3] = ["/dev/input/by-path/platform-ntx_event0-event",
+                                   "/dev/input/by-path/platform-0-0010-event",
+                                   "/dev/input/by-path/platform-1-001e-event"];
 const KOBO_UPDATE_BUNDLE: &str = "/mnt/onboard/.kobo/KoboRoot.tgz";
 const KEYBOARD_LAYOUTS_DIRNAME: &str = "keyboard-layouts";
 const DICTIONARIES_DIRNAME: &str = "dictionaries";
@@ -131,7 +134,8 @@ impl Context {
             if !glob.is_match(path) {
                 continue;
             }
-            if let Ok(layout) = load_json::<Layout, _>(path) {
+            if let Ok(layout) = load_json::<Layout, _>(path)
+                                          .map_err(|e| eprintln!("Can't load {}: {:#?}.", path.display(), e)) {
                 self.keyboard_layouts.insert(layout.name.clone(), layout);
             }
         }
@@ -304,14 +308,14 @@ fn resume(id: TaskId, tasks: &mut Vec<Task>, view: &mut dyn View, hub: &Sender<E
     }
 }
 
-fn power_off(view: &mut dyn View, history: &mut Vec<HistoryItem>, updating: &mut FxHashMap<u32, Rectangle>, context: &mut Context) {
+fn power_off(view: &mut dyn View, history: &mut Vec<HistoryItem>, updating: &mut Vec<UpdateData>, context: &mut Context) {
     let (tx, _rx) = mpsc::channel();
     view.handle_event(&Event::Back, &tx, &mut VecDeque::new(), &mut RenderQueue::new(), context);
     while let Some(mut item) = history.pop() {
         item.view.handle_event(&Event::Back, &tx, &mut VecDeque::new(), &mut RenderQueue::new(), context);
     }
     let interm = Intermission::new(context.fb.rect(), IntermKind::PowerOff, context);
-    updating.retain(|tok, _| context.fb.wait(*tok).is_err());
+    wait_for_all(updating, context);
     interm.render(context.fb.as_mut(), *interm.rect(), &mut context.fonts);
     context.fb.update(interm.rect(), UpdateMode::Full).ok();
 }
@@ -342,26 +346,40 @@ enum ExitStatus {
 pub fn run() -> Result<(), Error> {
     let mut inactive_since = Instant::now();
     let mut exit_status = ExitStatus::Quit;
-    let mut fb = KoboFramebuffer::new(FB_DEVICE).context("can't create framebuffer")?;
+
+    let mut fb: Box<dyn Framebuffer> = if CURRENT_DEVICE.mark() != 8 {
+        Box::new(KoboFramebuffer1::new(FB_DEVICE).context("can't create framebuffer")?)
+    } else {
+        Box::new(KoboFramebuffer2::new(FB_DEVICE).context("can't create framebuffer")?)
+    };
+
     let initial_rotation = CURRENT_DEVICE.transformed_rotation(fb.rotation());
     let startup_rotation = CURRENT_DEVICE.startup_rotation();
     if !CURRENT_DEVICE.has_gyroscope() && initial_rotation != startup_rotation {
         fb.set_rotation(startup_rotation).ok();
     }
 
+<<<<<<< HEAD
     let mut context = build_context(Box::new(fb)).context("Can't build context.")?;
     set_wifi(true, &mut context);
     context.client.test_login();
     // if !context.client.test_login() {
     //     context.client.login("momijizukamori", "");
     // }
+=======
+    let mut context = build_context(fb).context("can't build context")?;
+>>>>>>> upstream-master
     if context.settings.import.startup_trigger {
         context.batch_import();
     }
     context.load_dictionaries();
     context.load_keyboard_layouts();
 
-    let paths = vec![EVENT_BUTTONS.to_string(), EVENT_TOUCH_SCREEN.to_string()];
+    let paths = if CURRENT_DEVICE.mark() != 8 {
+        INPUT_EVENTS_A.iter().cloned().map(String::from).collect()
+    } else {
+        INPUT_EVENTS_B.iter().cloned().map(String::from).collect()
+    };
     let (raw_sender, raw_receiver) = raw_events(paths);
     let touch_screen = gesture_events(device_events(raw_receiver, context.display, context.settings.button_scheme));
     let usb_port = usb_events();
@@ -408,6 +426,8 @@ pub fn run() -> Result<(), Error> {
         });
     }
 
+    context.fb.set_inverted(context.settings.inverted);
+
     if context.settings.wifi {
         Command::new("scripts/wifi-enable.sh").status().ok();
     } else {
@@ -430,7 +450,7 @@ pub fn run() -> Result<(), Error> {
     // let mut view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), base_path.to_string(), &tx,
     //                                                  &mut rq, &mut context)?);
 
-    let mut updating = FxHashMap::default();
+    let mut updating = Vec::new();
     let current_dir = env::current_dir()?;
 
     println!("{} is running on a Kobo {}.", APP_NAME,
@@ -647,6 +667,10 @@ pub fn run() -> Result<(), Error> {
                             continue;
                         }
 
+                        if view.is::<RotationValues>() {
+                            println!("Gyro rotation: {}", n);
+                        }
+
                         if let Some(rotation_lock) = context.settings.rotation_lock {
                             let orientation = CURRENT_DEVICE.orientation(n);
                             if rotation_lock == RotationLock::Current ||
@@ -673,7 +697,7 @@ pub fn run() -> Result<(), Error> {
                                            task.id == TaskId::Suspend) {
                     continue;
                 }
-                if let Ok(v) = context.battery.capacity() {
+                if let Ok(v) = context.battery.capacity().map(|v| v[0]) {
                     if v < context.settings.battery.power_off {
                         power_off(view.as_mut(), &mut history, &mut updating, &mut context);
                         exit_status = ExitStatus::PowerOff;
@@ -687,7 +711,7 @@ pub fn run() -> Result<(), Error> {
             },
             Event::PrepareSuspend => {
                 tasks.retain(|task| task.id != TaskId::PrepareSuspend);
-                updating.retain(|tok, _| context.fb.wait(*tok).is_err());
+                wait_for_all(&mut updating, &mut context);
                 let path = Path::new(SETTINGS_PATH);
                 update_session(&mut context);
                 save_toml(&context.settings, path).map_err(|e| eprintln!("Can't save settings: {:#}.", e)).ok();
@@ -754,7 +778,7 @@ pub fn run() -> Result<(), Error> {
                 while let Some(mut item) = history.pop() {
                     item.view.handle_event(&Event::Back, &tx, &mut bus, &mut rq, &mut context);
                     if item.rotation != context.display.rotation {
-                        updating.retain(|tok, _| context.fb.wait(*tok).is_err());
+                        wait_for_all(&mut updating, &mut context);
                         if let Ok(dims) = context.fb.set_rotation(item.rotation) {
                             raw_sender.send(display_rotate_event(item.rotation)).ok();
                             context.display.rotation = item.rotation;
@@ -837,7 +861,7 @@ pub fn run() -> Result<(), Error> {
                 if let Some(reader_info) = info.reader.as_ref() {
                     if let Some(n) = reader_info.rotation.map(|n| CURRENT_DEVICE.from_canonical(n)) {
                         if CURRENT_DEVICE.orientation(n) != CURRENT_DEVICE.orientation(rotation) {
-                            updating.retain(|tok, _| context.fb.wait(*tok).is_err());
+                            wait_for_all(&mut updating, &mut context);
                             if let Ok(dims) = context.fb.set_rotation(n) {
                                 raw_sender.send(display_rotate_event(n)).ok();
                                 context.display.rotation = n;
@@ -1002,7 +1026,7 @@ pub fn run() -> Result<(), Error> {
                         context.fb.set_dithered(item.dithered);
                     }
                     if CURRENT_DEVICE.orientation(item.rotation) != CURRENT_DEVICE.orientation(context.display.rotation) {
-                        updating.retain(|tok, _| context.fb.wait(*tok).is_err());
+                        wait_for_all(&mut updating, &mut context);
                         if let Ok(dims) = context.fb.set_rotation(item.rotation) {
                             raw_sender.send(display_rotate_event(item.rotation)).ok();
                             context.display.rotation = item.rotation;
@@ -1065,14 +1089,15 @@ pub fn run() -> Result<(), Error> {
             },
             Event::Select(EntryId::ToggleInverted) => {
                 context.fb.toggle_inverted();
-                rq.add(RenderData::new(view.id(), context.fb.rect(), UpdateMode::Gui));
+                context.settings.inverted = context.fb.inverted();
+                rq.add(RenderData::new(view.id(), context.fb.rect(), UpdateMode::Full));
             },
             Event::Select(EntryId::ToggleDithered) => {
                 context.fb.toggle_dithered();
                 rq.add(RenderData::new(view.id(), context.fb.rect(), UpdateMode::Full));
             },
             Event::Select(EntryId::Rotate(n)) if n != context.display.rotation && view.might_rotate() => {
-                updating.retain(|tok, _| context.fb.wait(*tok).is_err());
+                wait_for_all(&mut updating, &mut context);
                 if let Ok(dims) = context.fb.set_rotation(n) {
                     raw_sender.send(display_rotate_event(n)).ok();
                     context.display.rotation = n;
@@ -1215,12 +1240,10 @@ pub fn run() -> Result<(), Error> {
 
     match exit_status {
         ExitStatus::Reboot => {
-            Command::new("sync").status().ok();
-            Command::new("reboot").status().ok();
+            File::create("/tmp/reboot").ok();
         },
         ExitStatus::PowerOff => {
-            Command::new("sync").status().ok();
-            Command::new("poweroff").arg("-f").status().ok();
+            File::create("/tmp/power_off").ok();
         },
         _ => (),
     }

@@ -21,15 +21,17 @@ else
 	# shellcheck disable=SC2046
 	export $(grep -sE '^(INTERFACE|WIFI_MODULE|DBUS_SESSION_BUS_ADDRESS|NICKEL_HOME|LANG)=' /proc/"$(pidof -s nickel)"/environ)
 	sync
-	killall -TERM nickel hindenburg sickel fickel adobehost fmon > /dev/null 2>&1
+	killall -TERM nickel hindenburg sickel fickel adobehost foxitpdf iink dhcpcd-dbus dhcpcd fmon > /dev/null 2>&1
 fi
 
-# Turn off the blinking LEDs
+# Turn off the LEDs
 # https://www.tablix.org/~avian/blog/archives/2013/03/blinken_kindle/
 LEDS_INTERFACE=/sys/devices/platform/pmic_light.1/lit
-echo "ch 4" > "$LEDS_INTERFACE"
-echo "cur 0" > "$LEDS_INTERFACE"
-echo "dc 0" > "$LEDS_INTERFACE"
+for ch in 3 4 5; do
+	echo "ch ${ch}" > "$LEDS_INTERFACE"
+	echo "cur 1" > "$LEDS_INTERFACE"
+	echo "dc 0" > "$LEDS_INTERFACE"
+done
 
 # Remount the SD card read-write if it's mounted read-only
 grep -q ' /mnt/sd .*[ ,]ro[ ,]' /proc/mounts && mount -o remount,rw /mnt/sd
@@ -59,6 +61,9 @@ if [ -e "$KOBO_TAG" ] ; then
 		377|380) PRODUCT_ID=0x4229 ;; # Forma, Forma 32GB
 		384)     PRODUCT_ID=0x4232 ;; # Libra H₂O
 		382)     PRODUCT_ID=0x4230 ;; # Nia
+		387)     PRODUCT_ID=0x4233 ;; # Elipsa
+		383)     PRODUCT_ID=0x4231 ;; # Sage
+		388)     PRODUCT_ID=0x4234 ;; # Libra 2
 		*)       PRODUCT_ID=0x6666 ;;
 	esac
 
@@ -73,7 +78,7 @@ export LD_LIBRARY_PATH="libs:${LD_LIBRARY_PATH}"
 
 if [ "$PLATO_SET_FRAMEBUFFER_DEPTH" ] ; then
 	case "${PRODUCT}:${MODEL_NUMBER}" in
-		storm:*|frost:*|nova:*|snow:378|star:379)
+		io:*|cadmus:*|europa:*|storm:*|frost:*|nova:*|snow:378|star:379)
 			unset ORIG_BPP
 			;;
 		*)
@@ -88,8 +93,11 @@ LIBC_FATAL_STDERR_=1 ./plato >> info.log 2>&1 || rm bootlock
 
 [ "$ORIG_BPP" ] && ./bin/utils/fbdepth -q -d "$ORIG_BPP"
 
-if [ "$PLATO_STANDALONE" ] ; then
-	sync
+if [ -e /tmp/reboot ] ; then
+	reboot
+elif [ -e /tmp/power_off ] ; then
+	poweroff -f
+elif [ "$PLATO_STANDALONE" ] ; then
 	reboot
 else
 	./nickel.sh &

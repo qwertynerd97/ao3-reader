@@ -2,6 +2,7 @@ mod tool_bar;
 mod bottom_bar;
 mod results_bar;
 mod margin_cropper;
+mod chapter_label;
 mod results_label;
 
 use std::thread;
@@ -46,7 +47,8 @@ use crate::view::overlay::Overlay;
 use crate::view::overlay::chapters::Chapters;
 use crate::view::overlay::works::WorksOverlay;
 use crate::view::works::work::{Work, WorkView};
-use crate::settings::{guess_frontlight, FinishedAction, SouthEastCornerAction};
+// use crate::settings::{guess_frontlight, FinishedAction, SouthEastCornerAction};
+use crate::settings::{guess_frontlight, FinishedAction, SouthEastCornerAction, SouthStripAction, WestStripAction, EastStripAction};
 use crate::settings::{DEFAULT_FONT_FAMILY, DEFAULT_TEXT_ALIGN, DEFAULT_LINE_HEIGHT, DEFAULT_MARGIN_WIDTH};
 use crate::settings::{HYPHEN_PENALTY, STRETCH_TOLERANCE};
 use crate::frontlight::LightLevels;
@@ -79,6 +81,7 @@ pub struct Reader {
     chunks: Vec<RenderChunk>,                        // Chunks of pages being rendered.
     text: FxHashMap<usize, Vec<BoundedText>>,        // Text of the current chunks.
     annotations: FxHashMap<usize, Vec<Annotation>>,  // Annotations for the current chunks.
+    noninverted_regions: FxHashMap<usize, Vec<Boundary>>,
     focus: Option<ViewId>,
     search: Option<Search>,
     search_direction: LinearDir,
@@ -285,6 +288,10 @@ impl Reader {
                 doc.set_stretch_tolerance(stretch_tolerance);
             }
 
+            if settings.reader.ignore_document_css {
+                doc.set_ignore_document_css(true);
+            }
+
             let first_location = doc.resolve_location(Location::Exact(0))?;
 
             let mut view_port = ViewPort::default();
@@ -347,9 +354,10 @@ impl Reader {
                 children: Vec::new(),
                 doc: Arc::new(Mutex::new(doc)),
                 cache: BTreeMap::new(),
+                chunks: Vec::new(),
                 text: FxHashMap::default(),
                 annotations: FxHashMap::default(),
-                chunks: Vec::new(),
+                noninverted_regions: FxHashMap::default(),
                 focus: None,
                 search: None,
                 search_direction: LinearDir::Forward,
@@ -488,9 +496,10 @@ impl Reader {
             children: Vec::new(),
             doc: Arc::new(Mutex::new(Box::new(doc))),
             cache: BTreeMap::new(),
+            chunks: Vec::new(),
             text: FxHashMap::default(),
             annotations: FxHashMap::default(),
-            chunks: Vec::new(),
+            noninverted_regions: FxHashMap::default(),
             focus: None,
             search: None,
             search_direction: LinearDir::Forward,
@@ -535,7 +544,7 @@ impl Reader {
         } else {
             let width = (dims.0 as f32 * scale).max(1.0) as u32;
             let height = (dims.1 as f32 * scale).max(1.0) as u32;
-            let pixmap = Pixmap::new(width, height);
+            let pixmap = Pixmap::empty(width, height);
             let frame = pixmap.rect();
             self.cache.insert(location, Resource { pixmap, frame, scale });
         }
@@ -591,7 +600,7 @@ impl Reader {
                                    .or_else(|| doc.toc()) {
                 let chap_offset = if dir == CycleDir::Previous {
                    doc.chapter(current_page, &toc)
-                      .and_then(|chap| doc.resolve_location(chap.location.clone()))
+                      .and_then(|(chap, _)| doc.resolve_location(chap.location.clone()))
                       .and_then(|chap_offset| if chap_offset < current_page { Some(chap_offset) } else { None })
                 } else {
                     None
@@ -937,18 +946,20 @@ impl Reader {
         if let Some(index) = locate::<BottomBar>(self) {
             let current_page = self.current_page;
             let mut doc = self.doc.lock().unwrap();
-            let chapter = self.toc().or_else(|| doc.toc())
-                              .as_ref().and_then(|toc| doc.chapter(current_page, toc))
-                              .map(|c| c.title.clone())
-                              .unwrap_or_default();
+            let rtoc = self.toc().or_else(|| doc.toc());
+            let chapter = rtoc.as_ref().and_then(|toc| doc.chapter(current_page, toc));
+            let title = chapter.map(|(c, _)| c.title.clone())
+                               .unwrap_or_default();
+            let progress = chapter.map(|(_, p)| p)
+                                  .unwrap_or_default();
             let bottom_bar = self.children[index].as_mut().downcast_mut::<BottomBar>().unwrap();
             let neighbors = Neighbors {
                 previous_page: doc.resolve_location(Location::Previous(current_page)),
                 next_page: doc.resolve_location(Location::Next(current_page)),
             };
+            bottom_bar.update_chapter_label(title, progress, rq);
             bottom_bar.update_page_label(self.current_page, self.pages_count, rq);
             bottom_bar.update_icons(&neighbors, rq);
-            bottom_bar.update_chapter(&chapter, rq);
         }
     }
 
@@ -998,6 +1009,18 @@ impl Reader {
             results_bar.update_results_label(count, rq);
             results_bar.update_page_label(current_page, pages_count, rq);
             results_bar.update_icons(current_page, pages_count, rq);
+        }
+    }
+
+    #[inline]
+    fn update_noninverted_regions(&mut self, inverted: bool) {
+        self.noninverted_regions.clear();
+        if inverted {
+            for chunk in &self.chunks {
+                if let Some((images, _)) = self.doc.lock().unwrap().images(Location::Exact(chunk.location)) {
+                    self.noninverted_regions.insert(chunk.location, images);
+                }
+            }
         }
     }
 
@@ -1121,6 +1144,7 @@ impl Reader {
         }
 
         self.update_annotations();
+        self.update_noninverted_regions(context.fb.inverted());
 
         if self.view_port.zoom_mode == ZoomMode::FitToPage ||
            self.view_port.zoom_mode == ZoomMode::FitToWidth {
@@ -1780,15 +1804,22 @@ impl Reader {
                 return;
             }
 
+            let zoom_mode = self.view_port.zoom_mode;
+            let sf = if let ZoomMode::Custom(sf) = zoom_mode { sf } else { 1.0 };
+
             let mut entries = if self.reflowable {
                 if self.ephemeral {
                     vec![EntryKind::Command("Save".to_string(), EntryId::Save)]
                 } else {
-                    Vec::new()
+                    vec![EntryKind::SubMenu("Zoom Mode".to_string(), vec![
+                         EntryKind::RadioButton("Fit to Page".to_string(),
+                                                EntryId::SetZoomMode(ZoomMode::FitToPage),
+                                                zoom_mode == ZoomMode::FitToPage),
+                         EntryKind::RadioButton(format!("Custom ({:.1}%)", 100.0 * sf),
+                                                EntryId::SetZoomMode(ZoomMode::Custom(sf)),
+                                                zoom_mode == ZoomMode::Custom(sf))])]
                 }
             } else {
-                let zoom_mode = self.view_port.zoom_mode;
-                let sf = if let ZoomMode::Custom(sf) = zoom_mode { sf } else { 1.0 };
                 vec![EntryKind::SubMenu("Zoom Mode".to_string(), vec![
                      EntryKind::RadioButton("Fit to Page".to_string(),
                                             EntryId::SetZoomMode(ZoomMode::FitToPage),
@@ -2394,9 +2425,9 @@ impl Reader {
 
     fn find_page_by_name(&self, name: &str) -> Option<usize> {
         self.info.reader.as_ref().and_then(|r| {
-            if let Ok(a) = u32::from_str_radix(name, 10) {
+            if let Ok(a) = name.parse::<u32>() {
                 r.page_names
-                 .iter().filter_map(|(i, s)| u32::from_str_radix(s, 10).ok().map(|b| (b, i)))
+                 .iter().filter_map(|(i, s)| s.parse::<u32>().ok().map(|b| (b, i)))
                  .filter(|(b, _)| *b <= a)
                  .max_by(|x, y| x.0.cmp(&y.0))
                  .map(|(b, i)| *i + (a - b) as usize)
@@ -2507,12 +2538,11 @@ impl Reader {
                            .find(|a| a.selection[0] == sel[0] && a.selection[1] == sel[1]))
     }
 
-    fn reseed(&mut self, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+    fn reseed(&mut self, rq: &mut RenderQueue, context: &mut Context) {
         if let Some(index) = locate::<TopBar>(self) {
-            self.child_mut(index).downcast_mut::<TopBar>().unwrap()
-                .update_frontlight_icon(&mut RenderQueue::new(), context);
-            hub.send(Event::ClockTick).ok();
-            hub.send(Event::BatteryTick).ok();
+            if let Some(top_bar) = self.child_mut(index).downcast_mut::<TopBar>() {
+                top_bar.reseed(rq, context);
+            }
         }
 
         rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
@@ -2689,17 +2719,13 @@ impl View for Reader {
 
             },
             Event::Gesture(GestureEvent::Pinch { axis: Axis::Horizontal, center, .. }) if self.rect.includes(center) => {
-                if !self.reflowable {
-                    self.set_zoom_mode(ZoomMode::FitToPage, true, hub, rq, context);
-                }
+                self.set_zoom_mode(ZoomMode::FitToPage, true, hub, rq, context);
                 true
             },
             Event::Gesture(GestureEvent::Spread { axis: Axis::Diagonal, center, factor }) |
             Event::Gesture(GestureEvent::Pinch { axis: Axis::Diagonal, center, factor }) if factor.is_finite() &&
                                                                                             self.rect.includes(center) => {
-                if !self.reflowable {
-                    self.scale_page(center, factor, hub, rq, context);
-                }
+                self.scale_page(center, factor, hub, rq, context);
                 true
             },
             Event::Gesture(GestureEvent::Arrow { dir, .. }) => {
@@ -3157,19 +3183,43 @@ impl View for Reader {
                         match dir {
                             Dir::West => {
                                 if self.search.is_none() {
-                                    self.go_to_neighbor(CycleDir::Previous, hub, rq, context);
+                                    match context.settings.reader.west_strip {
+                                        WestStripAction::PreviousPage => {
+                                            self.go_to_neighbor(CycleDir::Previous, hub, rq, context);
+                                        }
+                                        WestStripAction::NextPage => {
+                                            self.go_to_neighbor(CycleDir::Next, hub, rq, context);
+                                        }
+                                        WestStripAction::None => (),
+                                    }
                                 } else {
                                     self.go_to_results_neighbor(CycleDir::Previous, hub, rq, context);
                                 }
                             },
                             Dir::East => {
                                 if self.search.is_none() {
-                                    self.go_to_neighbor(CycleDir::Next, hub, rq, context);
+                                    match context.settings.reader.east_strip {
+                                        EastStripAction::PreviousPage => {
+                                            self.go_to_neighbor(CycleDir::Previous, hub, rq, context);
+                                        }
+                                        EastStripAction::NextPage => {
+                                            self.go_to_neighbor(CycleDir::Next, hub, rq, context);
+                                        }
+                                        EastStripAction::None => (),
+                                    }
                                 } else {
                                     self.go_to_results_neighbor(CycleDir::Next, hub, rq, context);
                                 }
                             },
-                            Dir::South | Dir::North => self.toggle_bars(None, hub, rq, context),
+                            Dir::South => match context.settings.reader.south_strip {
+                                SouthStripAction::ToggleBars => {
+                                    self.toggle_bars(None, hub, rq, context);
+                                }
+                                SouthStripAction::NextPage => {
+                                    self.go_to_neighbor(CycleDir::Next, hub, rq, context);
+                                }
+                            },
+                            Dir::North => self.toggle_bars(None, hub, rq, context),
                         }
                     },
                     Region::Center => self.toggle_bars(None, hub, rq, context),
@@ -3260,6 +3310,11 @@ impl View for Reader {
                             self.go_to_page(0, true, hub, rq, context);
                         } else if text == ")" {
                             self.go_to_page(self.pages_count.saturating_sub(1), true, hub, rq, context);
+                        } else if let Some(percent) = text.strip_suffix('%') {
+                            if let Ok(number) = percent.parse::<f64>() {
+                                let location = (number.max(0.0).min(100.0) / 100.0 * self.pages_count as f64).round() as usize;
+                                self.go_to_page(location, true, hub, rq, context);
+                            }
                         } else if let Ok(number) = caps[2].parse::<f64>() {
                             let location = if !self.synthetic {
                                 let mut index = number.max(0.0) as usize;
@@ -3512,7 +3567,8 @@ impl View for Reader {
                 if let Some(toc) = self.toc()
                                        .or_else(|| doc.toc())
                                        .filter(|toc| !toc.is_empty()) {
-                    let chap = doc.chapter(self.current_page, &toc);
+                    let chap = doc.chapter(self.current_page, &toc)
+                                  .map(|(c, _)| c);
                     let chap_index = chap.map_or(usize::MAX, |chap| chap.index);
                     let html = toc_as_html(&toc, chap_index);
                     let link_uri = chap.and_then(|chap| {
@@ -3546,7 +3602,7 @@ impl View for Reader {
             Event::Select(EntryId::Bookmarks) => {
                 self.toggle_bars(Some(false), hub, rq, context);
                 if let Some(bookmarks) = self.info.reader.as_ref().map(|r| &r.bookmarks) {
-                    let html = bookmarks_as_html(&bookmarks, self.current_page, self.synthetic);
+                    let html = bookmarks_as_html(bookmarks, self.current_page, self.synthetic);
                     let link_uri = bookmarks.range(..= self.current_page).next_back()
                                             .map(|index| format!("@{}", index));
                     hub.send(Event::OpenHtml(html, link_uri)).ok();
@@ -3786,8 +3842,12 @@ impl View for Reader {
                 }
                 true
             },
+            Event::Select(EntryId::ToggleInverted) => {
+                self.update_noninverted_regions(!context.fb.inverted());
+                false
+            },
             Event::Reseed => {
-                self.reseed(hub, rq, context);
+                self.reseed(rq, context);
                 true
             },
             Event::ToggleFrontlight => {
@@ -3842,6 +3902,15 @@ impl View for Reader {
                 let chunk_frame = region_rect - chunk.position + chunk.frame.min;
                 let chunk_position = region_rect.min;
                 fb.draw_framed_pixmap_contrast(pixmap, &chunk_frame, chunk_position, self.contrast.exponent, self.contrast.gray);
+
+                if let Some(rects) = self.noninverted_regions.get(&chunk.location) {
+                    for r in rects {
+                        let rect = (*r * scale).to_rect() - chunk.frame.min + chunk.position;
+                        if let Some(ref image_rect) = rect.intersection(&region_rect) {
+                            fb.invert_region(image_rect);
+                        }
+                    }
+                }
 
                 if let Some(groups) = self.search.as_ref().and_then(|s| s.highlights.get(&chunk.location)) {
                     for rects in groups {

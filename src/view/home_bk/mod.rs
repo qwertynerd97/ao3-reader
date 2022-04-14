@@ -873,6 +873,9 @@ impl Home {
                                EntryKind::RadioButton("Year".to_string(),
                                                       EntryId::Sort(SortMethod::Year),
                                                       self.sort_method == SortMethod::Year),
+                               EntryKind::RadioButton("Series".to_string(),
+                                                      EntryId::Sort(SortMethod::Series),
+                                                      self.sort_method == SortMethod::Series),
                                EntryKind::RadioButton("File Size".to_string(),
                                                       EntryId::Sort(SortMethod::Size),
                                                       self.sort_method == SortMethod::Size),
@@ -1387,9 +1390,7 @@ impl Home {
         self.refresh_visibles(true, false, hub, &mut RenderQueue::new(), context);
 
         if let Some(top_bar) = self.child_mut(0).downcast_mut::<TopBar>() {
-            top_bar.update_frontlight_icon(&mut RenderQueue::new(), context);
-            hub.send(Event::ClockTick).ok();
-            hub.send(Event::BatteryTick).ok();
+            top_bar.reseed(&mut RenderQueue::new(), context);
         }
 
         rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
@@ -1579,7 +1580,7 @@ impl View for Home {
             },
             Event::Submit(ViewId::AddressBarInput, ref addr) => {
                 self.toggle_keyboard(false, true, None, hub, rq, context);
-                self.select_directory(&Path::new(addr), hub, rq, context);
+                self.select_directory(Path::new(addr), hub, rq, context);
                 true
             },
             Event::Submit(ViewId::HomeSearchInput, ref text) => {

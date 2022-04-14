@@ -7,7 +7,7 @@ use std::fs::File;
 use std::sync::mpsc::{self, Sender, Receiver};
 use std::os::unix::io::AsRawFd;
 use std::ffi::CString;
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::FxHashMap;
 use crate::framebuffer::Display;
 use crate::settings::ButtonScheme;
 use crate::device::CURRENT_DEVICE;
@@ -55,7 +55,9 @@ pub const KEY_HOME: u16 = 102;
 pub const KEY_LIGHT: u16 = 90;
 pub const KEY_BACKWARD: u16 = 193;
 pub const KEY_FORWARD: u16 = 194;
-pub const SLEEP_COVER: u16 = 59;
+pub const PEN_ERASE: u16 = 331;
+pub const PEN_HIGHLIGHT: u16 = 332;
+pub const SLEEP_COVER: [u16; 2] = [59, 35];
 // Synthetic touch button
 pub const BTN_TOUCH: u16 = 330;
 // The following key codes are fake, and are used to support
@@ -101,6 +103,7 @@ pub enum TouchProto {
     Single,
     MultiA,
     MultiB,
+    MultiC,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -135,6 +138,8 @@ pub enum ButtonCode {
     Light,
     Backward,
     Forward,
+    Erase,
+    Highlight,
     Raw(u16),
 }
 
@@ -146,6 +151,8 @@ impl ButtonCode {
             KEY_LIGHT => ButtonCode::Light,
             KEY_BACKWARD => resolve_button_direction(LinearDir::Backward, rotation, button_scheme),
             KEY_FORWARD => resolve_button_direction(LinearDir::Forward, rotation, button_scheme),
+            PEN_ERASE => ButtonCode::Erase,
+            PEN_HIGHLIGHT => ButtonCode::Highlight,
             _ => ButtonCode::Raw(code)
         }
     }
@@ -327,21 +334,38 @@ pub fn device_events(rx: Receiver<InputEvent>, display: Display, button_scheme: 
     ry
 }
 
+struct TouchState {
+    position: Point,
+    pressure: i32,
+}
+
+impl Default for TouchState {
+    fn default() -> Self {
+        TouchState {
+            position: Point::default(),
+            pressure: 0,
+        }
+    }
+}
+
 pub fn parse_device_events(rx: &Receiver<InputEvent>, ty: &Sender<DeviceEvent>, display: Display, button_scheme: ButtonScheme) {
     let mut id = 0;
-    let mut position = Point::default();
-    let mut pressure = 0;
     let mut last_activity = -60;
     let Display { mut dims, mut rotation } = display;
     let mut fingers: FxHashMap<i32, Point> = FxHashMap::default();
-    let mut packet_ids: FxHashSet<i32> = FxHashSet::default();
+    let mut packets: FxHashMap<i32, TouchState> = FxHashMap::default();
     let proto = CURRENT_DEVICE.proto;
 
     let mut tc = match proto {
         TouchProto::Single => SINGLE_TOUCH_CODES,
         TouchProto::MultiA => MULTI_TOUCH_CODES_A,
         TouchProto::MultiB => MULTI_TOUCH_CODES_B,
+        TouchProto::MultiC => MULTI_TOUCH_CODES_B,
     };
+
+    if proto == TouchProto::Single {
+        packets.insert(id, TouchState::default());
+    }
 
     let (mut mirror_x, mut mirror_y) = CURRENT_DEVICE.should_mirror_axes(rotation);
     if CURRENT_DEVICE.should_swap_axes(rotation) {
@@ -353,65 +377,42 @@ pub fn parse_device_events(rx: &Receiver<InputEvent>, ty: &Sender<DeviceEvent>, 
     while let Ok(evt) = rx.recv() {
         if evt.kind == EV_ABS {
             if evt.code == ABS_MT_TRACKING_ID {
-                id = evt.value;
-                if proto == TouchProto::MultiB {
-                    packet_ids.insert(id);
+                if evt.value >= 0 {
+                    id = evt.value;
+                    packets.insert(id, TouchState::default());
                 }
             } else if evt.code == tc.x {
-                position.x = if mirror_x {
-                    dims.0 as i32 - 1 - evt.value
-                } else {
-                    evt.value
-                };
+                if let Some(state) = packets.get_mut(&id) {
+                    state.position.x = if mirror_x {
+                        dims.0 as i32 - 1 - evt.value
+                    } else {
+                        evt.value
+                    };
+                }
             } else if evt.code == tc.y {
-                position.y = if mirror_y {
-                    dims.1 as i32 - 1 - evt.value
-                } else {
-                    evt.value
-                };
+                if let Some(state) = packets.get_mut(&id) {
+                    state.position.y = if mirror_y {
+                        dims.1 as i32 - 1 - evt.value
+                    } else {
+                        evt.value
+                    };
+                }
             } else if evt.code == tc.pressure {
-                pressure = evt.value;
+                if let Some(state) = packets.get_mut(&id) {
+                    state.pressure = evt.value;
+                }
             }
-        } else if evt.kind == EV_SYN {
+        } else if evt.kind == EV_SYN && evt.code == SYN_REPORT {
             // The absolute value accounts for the wrapping around that might occur,
             // since `tv_sec` can't grow forever.
             if (evt.time.tv_sec - last_activity).abs() >= 60 {
                 last_activity = evt.time.tv_sec;
                 ty.send(DeviceEvent::UserActivity).ok();
             }
-            if evt.code == SYN_MT_REPORT || (proto == TouchProto::Single && evt.code == SYN_REPORT) {
-                if let Some(&p) = fingers.get(&id) {
-                    if pressure > 0 {
-                        if p != position {
-                            ty.send(DeviceEvent::Finger {
-                                id,
-                                time: seconds(evt.time),
-                                status: FingerStatus::Motion,
-                                position,
-                            }).unwrap();
-                            fingers.insert(id, position);
-                        }
-                    } else {
-                        ty.send(DeviceEvent::Finger {
-                            id,
-                            time: seconds(evt.time),
-                            status: FingerStatus::Up,
-                            position,
-                        }).unwrap();
-                        fingers.remove(&id);
-                    }
-                } else {
-                    ty.send(DeviceEvent::Finger {
-                        id,
-                        time: seconds(evt.time),
-                        status: FingerStatus::Down,
-                        position,
-                    }).unwrap();
-                    fingers.insert(id, position);
-                }
-            } else if proto == TouchProto::MultiB && evt.code == SYN_REPORT {
+
+            if proto == TouchProto::MultiB {
                 fingers.retain(|other_id, other_position| {
-                    packet_ids.contains(other_id) ||
+                    packets.contains_key(&other_id) ||
                     ty.send(DeviceEvent::Finger {
                         id: *other_id,
                         time: seconds(evt.time),
@@ -419,10 +420,45 @@ pub fn parse_device_events(rx: &Receiver<InputEvent>, ty: &Sender<DeviceEvent>, 
                         position: *other_position,
                     }).is_err()
                 });
-                packet_ids.clear();
+            }
+
+            for (&id, state) in &packets {
+                if let Some(&pos) = fingers.get(&id) {
+                    if state.pressure > 0 {
+                        if state.position != pos {
+                            ty.send(DeviceEvent::Finger {
+                                id,
+                                time: seconds(evt.time),
+                                status: FingerStatus::Motion,
+                                position: state.position,
+                            }).unwrap();
+                            fingers.insert(id, state.position);
+                        }
+                    } else {
+                        ty.send(DeviceEvent::Finger {
+                            id,
+                            time: seconds(evt.time),
+                            status: FingerStatus::Up,
+                            position: state.position,
+                        }).unwrap();
+                        fingers.remove(&id);
+                    }
+                } else if state.pressure > 0 {
+                    ty.send(DeviceEvent::Finger {
+                        id,
+                        time: seconds(evt.time),
+                        status: FingerStatus::Down,
+                        position: state.position,
+                    }).unwrap();
+                    fingers.insert(id, state.position);
+                }
+            }
+
+            if proto != TouchProto::Single {
+                packets.clear();
             }
         } else if evt.kind == EV_KEY {
-            if evt.code == SLEEP_COVER {
+            if SLEEP_COVER.contains(&evt.code) {
                 if evt.value == VAL_PRESS {
                     ty.send(DeviceEvent::CoverOn).ok();
                 } else if evt.value == VAL_RELEASE {

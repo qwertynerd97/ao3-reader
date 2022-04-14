@@ -14,6 +14,9 @@ use crate::geom::Point;
 use crate::document::{Document, SimpleTocEntry, TextLocation};
 use crate::document::asciify;
 use crate::document::epub::EpubDocument;
+use crate::document::html::HtmlDocument;
+use crate::document::pdf::PdfOpener;
+use crate::document::djvu::DjvuOpener;
 use crate::helpers::datetime_format;
 
 pub const DEFAULT_CONTRAST_EXPONENT: f32 = 1.0;
@@ -547,8 +550,8 @@ impl BookQuery {
         self.finished.as_ref().map(|eq| info.simple_status().eq(&SimpleStatus::Finished) == *eq) != Some(false) &&
         self.annotations.as_ref().map(|eq| info.reader.as_ref().map_or(false, |r| !r.annotations.is_empty()) == *eq) != Some(false) &&
         self.bookmarks.as_ref().map(|eq| info.reader.as_ref().map_or(false, |r| !r.bookmarks.is_empty()) == *eq) != Some(false) &&
-        self.opened_after.as_ref().map(|(eq, opened)| info.reader.as_ref().map_or(false, |r| r.opened.gt(&opened)) == *eq) != Some(false) &&
-        self.added_after.as_ref().map(|(eq, added)| info.added.gt(&added) == *eq) != Some(false)
+        self.opened_after.as_ref().map(|(eq, opened)| info.reader.as_ref().map_or(false, |r| r.opened.gt(opened)) == *eq) != Some(false) &&
+        self.added_after.as_ref().map(|(eq, added)| info.added.gt(added) == *eq) != Some(false)
     }
 
 
@@ -568,6 +571,7 @@ pub enum SortMethod {
     Title,
     Year,
     Author,
+    Series,
     Pages,
     Size,
     Kind,
@@ -579,8 +583,8 @@ impl SortMethod {
     pub fn reverse_order(self) -> bool {
         !matches!(self,
                   SortMethod::Author | SortMethod::Title |
-                  SortMethod::Kind | SortMethod::FileName |
-                  SortMethod::FilePath)
+                  SortMethod::Series | SortMethod::Kind |
+                  SortMethod::FileName | SortMethod::FilePath)
     }
 
     pub fn is_status_related(self) -> bool {
@@ -598,6 +602,7 @@ impl SortMethod {
             SortMethod::Author => "Author",
             SortMethod::Title => "Title",
             SortMethod::Year => "Year",
+            SortMethod::Series => "Series",
             SortMethod::Size => "File Size",
             SortMethod::Kind => "File Type",
             SortMethod::Pages => "Pages Count",
@@ -631,6 +636,7 @@ pub fn sorter(sort_method: SortMethod) -> fn(&Info, &Info) -> Ordering {
         SortMethod::Author => sort_author,
         SortMethod::Title => sort_title,
         SortMethod::Year => sort_year,
+        SortMethod::Series => sort_series,
         SortMethod::Size => sort_size,
         SortMethod::Kind => sort_kind,
         SortMethod::Pages => sort_pages,
@@ -704,6 +710,14 @@ pub fn sort_year(i1: &Info, i2: &Info) -> Ordering {
     i1.year.cmp(&i2.year)
 }
 
+pub fn sort_series(i1: &Info, i2: &Info) -> Ordering {
+    i1.series.cmp(&i2.series).then_with(|| {
+        usize::from_str_radix(&i1.number, 10).ok()
+              .zip(usize::from_str_radix(&i2.number, 10).ok())
+              .map_or_else(|| i1.number.cmp(&i2.number), |(a, b)| a.cmp(&b))
+    })
+}
+
 pub fn sort_filename(i1: &Info, i2: &Info) -> Ordering {
     i1.file.path.file_name().cmp(&i2.file.path.file_name())
 }
@@ -722,27 +736,65 @@ lazy_static! {
 }
 
 #[inline]
-pub fn extract_metadata_from_epub(prefix: &Path, info: &mut Info) {
-    if !info.title.is_empty() || info.file.kind != "epub" {
+pub fn extract_metadata_from_document(prefix: &Path, info: &mut Info) {
+    if !info.title.is_empty() {
         return;
     }
 
     let path = prefix.join(&info.file.path);
 
-    match EpubDocument::new(&path) {
-        Ok(doc) => {
-            info.title = doc.title().unwrap_or_default();
-            info.author = doc.author().unwrap_or_default();
-            info.year = doc.year().unwrap_or_default();
-            info.publisher = doc.publisher().unwrap_or_default();
-            if let Some((title, index)) = doc.series() {
-                info.series = title;
-                info.number = index;
+    match info.file.kind.as_ref() {
+        "epub" => {
+            match EpubDocument::new(&path) {
+                Ok(doc) => {
+                    info.title = doc.title().unwrap_or_default();
+                    info.author = doc.author().unwrap_or_default();
+                    info.year = doc.year().unwrap_or_default();
+                    info.publisher = doc.publisher().unwrap_or_default();
+                    if let Some((title, index)) = doc.series() {
+                        info.series = title;
+                        info.number = index;
+                    }
+                    info.language = doc.language().unwrap_or_default();
+                    info.categories.append(&mut doc.categories());
+                },
+                Err(e) => eprintln!("Can't open {}: {:#}.", info.file.path.display(), e),
             }
-            info.language = doc.language().unwrap_or_default();
-            info.categories.append(&mut doc.categories());
         },
-        Err(e) => eprintln!("Can't open {}: {:#}.", info.file.path.display(), e),
+        "html" | "htm" => {
+            match HtmlDocument::new(&path) {
+                Ok(doc) => {
+                    info.title = doc.title().unwrap_or_default();
+                    info.author = doc.author().unwrap_or_default();
+                    info.language = doc.language().unwrap_or_default();
+                },
+                Err(e) => eprintln!("Can't open {}: {:#}.", info.file.path.display(), e),
+            }
+        },
+        "pdf" => {
+            match PdfOpener::new().and_then(|o| o.open(path)) {
+                Some(doc) => {
+                    info.title = doc.title().unwrap_or_default();
+                    info.author = doc.author().unwrap_or_default();
+                },
+                None => eprintln!("Can't open {}.", info.file.path.display()),
+            }
+        },
+        "djvu" | "djv" => {
+            match DjvuOpener::new().and_then(|o| o.open(path)) {
+                Some(doc) => {
+                    info.title = doc.title().unwrap_or_default();
+                    info.author = doc.author().unwrap_or_default();
+                    info.year = doc.year().unwrap_or_default();
+                    info.series = doc.series().unwrap_or_default();
+                    info.publisher = doc.publisher().unwrap_or_default();
+                },
+                None => eprintln!("Can't open {}.", info.file.path.display()),
+            }
+        },
+        _ => {
+                eprintln!("Don't know how to extract metadata from {}.", &info.file.kind);
+        },
     }
 }
 

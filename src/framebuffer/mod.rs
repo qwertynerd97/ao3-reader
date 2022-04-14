@@ -1,13 +1,19 @@
+mod linuxfb_sys;
+mod ion_sys;
 mod mxcfb_sys;
-mod kobo;
+mod sunxi_sys;
 mod image;
+mod transform;
+mod kobo1;
+mod kobo2;
 
 use anyhow::Error;
 use crate::geom::{Point, Rectangle, surface_area, nearest_segment_point, lerp};
 use crate::geom::{CornerSpec, BorderSpec, ColorSource, Vec2};
 use crate::color::{BLACK, WHITE};
 
-pub use self::kobo::KoboFramebuffer;
+pub use self::kobo1::KoboFramebuffer1;
+pub use self::kobo2::KoboFramebuffer2;
 pub use self::image::Pixmap;
 
 #[derive(Debug, Copy, Clone)]
@@ -40,6 +46,8 @@ pub trait Framebuffer {
     fn monochrome(&self) -> bool;
     fn dithered(&self) -> bool;
     fn inverted(&self) -> bool;
+    fn width(&self) -> u32;
+    fn height(&self) -> u32;
 
     fn toggle_inverted(&mut self) {
         self.set_inverted(!self.inverted());
@@ -55,16 +63,6 @@ pub trait Framebuffer {
 
     fn rotation(&self) -> i8 {
         0
-    }
-
-    fn width(&self) -> u32 {
-        let (width, _) = self.dims();
-        width
-    }
-
-    fn height(&self) -> u32 {
-        let (_, height) = self.dims();
-        height
     }
 
     fn dims(&self) -> (u32, u32) {
@@ -122,8 +120,7 @@ pub trait Framebuffer {
             for x in 0..pixmap.width {
                 let px = x + pt.x as u32;
                 let py = y + pt.y as u32;
-                let addr = (y * pixmap.width + x) as usize;
-                let color = pixmap.data[addr];
+                let color = pixmap.get_pixel(x, y);
                 self.set_pixel(px, py, color);
             }
         }
@@ -134,8 +131,7 @@ pub trait Framebuffer {
             for x in rect.min.x..rect.max.x {
                 let px = x - rect.min.x + pt.x;
                 let py = y - rect.min.y + pt.y;
-                let addr = (y * pixmap.width as i32 + x) as usize;
-                let color = pixmap.data[addr];
+                let color = pixmap.get_pixel(x as u32, y as u32);
                 self.set_pixel(px as u32, py as u32, color);
             }
         }
@@ -152,8 +148,7 @@ pub trait Framebuffer {
             for x in rect.min.x..rect.max.x {
                 let px = x - rect.min.x + pt.x;
                 let py = y - rect.min.y + pt.y;
-                let addr = (y * pixmap.width as i32 + x) as usize;
-                let raw_color = pixmap.data[addr] as f32;
+                let raw_color = pixmap.get_pixel(x as u32, y as u32) as f32;
                 let color = if raw_color < gray {
                     (gray * (raw_color / gray).powf(exponent)) as u8
                 } else if raw_color > gray {
@@ -166,22 +161,19 @@ pub trait Framebuffer {
         }
     }
 
-    fn draw_framed_pixmap_halftone(&mut self, pixmap: &Pixmap, random: &Pixmap, rect: &Rectangle, pt: Point) {
+    fn draw_framed_pixmap_halftone(&mut self, pixmap: &Pixmap, rect: &Rectangle, pt: Point) {
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {
                 let px = x - rect.min.x + pt.x;
                 let py = y - rect.min.y + pt.y;
-                let addr = (y * pixmap.width as i32 + x) as usize;
-                let source_color = pixmap.data[addr];
+                let source_color = pixmap.get_pixel(x as u32, y as u32);
                 let color = if source_color == BLACK {
                     BLACK
                 } else if source_color == WHITE {
                     WHITE
                 } else {
-                    let rnd_color = random.data[addr];
-                    255 * (rnd_color < source_color) as u8
+                    transform::transform_dither_g2(x as u32, y as u32, source_color)
                 };
-                // let color = 255 * (pixmap.data[addr] / 255);
                 self.set_pixel(px as u32, py as u32, color);
             }
         }
@@ -192,8 +184,7 @@ pub trait Framebuffer {
             for x in 0..pixmap.width {
                 let px = x + pt.x as u32;
                 let py = y + pt.y as u32;
-                let addr = (y * pixmap.width + x) as usize;
-                let alpha = (255.0 - pixmap.data[addr] as f32) / 255.0;
+                let alpha = (255.0 - pixmap.get_pixel(x, y) as f32) / 255.0;
                 self.set_blended_pixel(px as u32, py as u32, color, alpha);
             }
         }
@@ -388,8 +379,8 @@ pub trait Framebuffer {
 
     fn draw_segment(&mut self, start: Point, end: Point, start_radius: f32, end_radius: f32, color: u8) {
         let rect = Rectangle::from_segment(start, end, start_radius.ceil() as i32, end_radius.ceil() as i32);
-        let a = vec2!(start.x as f32, start.y as f32);
-        let b = vec2!(end.x as f32, end.y as f32);
+        let a = vec2!(start.x as f32, start.y as f32) + 0.5;
+        let b = vec2!(end.x as f32, end.y as f32) + 0.5;
 
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {

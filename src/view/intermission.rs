@@ -62,7 +62,7 @@ impl View for Intermission {
     }
 
     fn render(&self, fb: &mut dyn Framebuffer, _rect: Rectangle, fonts: &mut Fonts) {
-        let scheme = if self.halt {
+        let scheme = if self.halt ^ fb.inverted() {
             TEXT_INVERTED_HARD
         } else {
             TEXT_NORMAL
@@ -114,6 +114,10 @@ impl View for Intermission {
                             let dy = (self.rect.height() as i32 - pixmap.height as i32) / 2;
                             let pt = self.rect.min + pt!(dx, dy);
                             fb.draw_pixmap(&pixmap, pt);
+                            if fb.inverted() {
+                                let rect = pixmap.rect() + pt;
+                                fb.invert_region(&rect);
+                            }
                         }
                     }
                 }
@@ -125,6 +129,10 @@ impl View for Intermission {
                         let dy = (self.rect.height() as i32 - pixmap.height as i32) / 2;
                         let pt = self.rect.min + pt!(dx, dy);
                         fb.draw_pixmap(&pixmap, pt);
+                        if fb.inverted() {
+                            let rect = pixmap.rect() + pt;
+                            fb.invert_region(&rect);
+                        }
                     }
                 }
             },

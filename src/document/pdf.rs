@@ -92,12 +92,6 @@ impl PdfOpener {
         }
     }
 
-    pub fn set_use_document_css(&mut self, should_use: bool) {
-        unsafe {
-            fz_set_use_document_css((self.0).0, should_use as libc::c_int);
-        }
-    }
-
     pub fn set_user_css<P: AsRef<Path>>(&mut self, path: P) -> Result<(), Error> {
         let mut file = File::open(path)?;
         let mut buf = Vec::new();
@@ -196,8 +190,8 @@ impl Document for PdfDocument {
         }
     }
 
-    fn chapter<'a>(&mut self, offset: usize, toc: &'a [TocEntry]) -> Option<&'a TocEntry> {
-        chapter(offset, toc)
+    fn chapter<'a>(&mut self, offset: usize, toc: &'a [TocEntry]) -> Option<(&'a TocEntry, f32)> {
+        chapter(offset, self.pages_count(), toc)
     }
 
     fn chapter_relative<'a>(&mut self, offset: usize, dir: CycleDir, toc: &'a [TocEntry]) -> Option<&'a TocEntry> {
@@ -225,6 +219,11 @@ impl Document for PdfDocument {
     fn lines(&mut self, loc: Location) -> Option<(Vec<BoundedText>, usize)> {
         let index = self.resolve_location(loc)?;
         self.page(index).and_then(|page| page.lines()).map(|lines| (lines, index))
+    }
+
+    fn images(&mut self, loc: Location) -> Option<(Vec<Boundary>, usize)> {
+        let index = self.resolve_location(loc)?;
+        self.page(index).and_then(|page| page.images()).map(|images| (images, index))
     }
 
     fn links(&mut self, loc: Location) -> Option<(Vec<BoundedText>, usize)> {
@@ -271,9 +270,41 @@ impl Document for PdfDocument {
 
     fn set_stretch_tolerance(&mut self, _stretch_tolerance: f32) {
     }
+
+    fn set_ignore_document_css(&mut self, ignore: bool) {
+        unsafe {
+            fz_set_use_document_css(self.ctx.0, !ignore as libc::c_int);
+        }
+    }
 }
 
 impl<'a> PdfPage<'a> {
+    pub fn images(&self) -> Option<Vec<Boundary>> {
+        unsafe {
+            let mut images: Vec<Boundary> = Vec::new();
+            let opts = FzTextOptions { flags: FZ_TEXT_PRESERVE_IMAGES };
+            let tp = mp_new_stext_page_from_page(self.ctx.0, self.page, &opts);
+            if tp.is_null() {
+                return None;
+            }
+
+            let mut block = (*tp).first_block;
+
+            while !block.is_null() {
+                if (*block).kind == FZ_PAGE_BLOCK_IMAGE {
+                    let bnd: Boundary = (*block).bbox.into();
+                    images.retain(|img| !img.overlaps(&bnd));
+                    images.push(bnd);
+                }
+
+                block = (*block).next;
+            }
+
+            fz_drop_stext_page(self.ctx.0, tp);
+            Some(images)
+        }
+    }
+
     pub fn lines(&self) -> Option<Vec<BoundedText>> {
         unsafe {
             let mut lines = Vec::new();
@@ -413,7 +444,13 @@ impl<'a> PdfPage<'a> {
             let width = (*pixmap).w as u32;
             let height = (*pixmap).h as u32;
             let len = (width * height) as usize;
-            let data = slice::from_raw_parts((*pixmap).samples, len).to_vec();
+            let samples = slice::from_raw_parts((*pixmap).samples, len);
+            let mut data = Vec::new();
+            if data.try_reserve(len).is_err() {
+                fz_drop_pixmap(self.ctx.0, pixmap);
+                return None;
+            }
+            data.extend(samples);
 
             fz_drop_pixmap(self.ctx.0, pixmap);
 
