@@ -87,12 +87,14 @@ impl<'a> XmlParser<'a> {
                 match name {
                     "area"|"base"|"br"|"col"|"command"|"embed"|"hr"|"img"|"input"|"keygen"|"link"|"meta"|"param"|"source"|"track"|"wbr" => {
                         self.advance(1);
-                        nodes.push(element(name, offset - 1, attributes, Vec::new()));
+                        tree.get_mut(parent_id)
+                             .append(element(name, offset - 1, attributes));
                     },
                     _ => {
                         self.advance(1);
-                        let children = self.parse_nodes();
-                        nodes.push(element(name, offset - 1, attributes, children));
+                        let id = tree.get_mut(parent_id)
+                             .append(element(name, offset - 1, attributes));
+                        self.parse_nodes(tree, id);
                     }
                 }
             }

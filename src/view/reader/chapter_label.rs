@@ -7,6 +7,7 @@ use crate::framebuffer::{Framebuffer, UpdateMode};
 use super::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, ViewId};
 use crate::app::Context;
 
+#[derive(Debug, Clone)]
 pub struct ChapterLabel {
     id: Id,
     rect: Rectangle,

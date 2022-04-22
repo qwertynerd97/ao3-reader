@@ -359,16 +359,12 @@ pub fn run() -> Result<(), Error> {
         fb.set_rotation(startup_rotation).ok();
     }
 
-<<<<<<< HEAD
-    let mut context = build_context(Box::new(fb)).context("Can't build context.")?;
+    let mut context = build_context(fb).context("can't build context")?;
     set_wifi(true, &mut context);
     context.client.test_login();
     // if !context.client.test_login() {
     //     context.client.login("momijizukamori", "");
     // }
-=======
-    let mut context = build_context(fb).context("can't build context")?;
->>>>>>> upstream-master
     if context.settings.import.startup_trigger {
         context.batch_import();
     }

@@ -155,8 +155,8 @@ impl HtmlDocument {
     //     return reqwest::blocking::get(uri).ok()?.text().ok()?;
     // }
 
-    fn cache_uris(&mut self, node: &Node, name: &str, cache: &mut UriCache) {
-        if let Some(id) = node.attr("id") {
+    fn cache_uris(&mut self, node: NodeRef, name: &str, cache: &mut UriCache) {
+        if let Some(id) = node.attribute("id") {
             cache.insert(format!("{}#{}", name, id), node.offset());
         }
         for child in node.children() {

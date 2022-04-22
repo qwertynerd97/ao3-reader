@@ -110,7 +110,7 @@ impl About {
                 if tag.lines() > 1 {
                     // we need to split a tag
                     let split = rect.max.y * pg_count;
-                    println!("Tag lines is {}, split is {}", tag.lines(), split);
+                    // println!("Tag lines is {}, split is {}", tag.lines(), split);
                     let new_tag = tag.split(split);
                     page.push(tag); 
                     i += 1;
@@ -150,12 +150,12 @@ impl About {
         let mut children = Vec::new();
         children.push(Box::new(overlay.clone()) as Box<dyn View>);
         for tag in temp {
-            // println!("tag rects are {:?}", tag.rects);
-            // println!("Tag link is {:?}", tag.loc);
+             println!("tag rects are {:?}", tag.rects);
+             println!("Tag link is {:?}", tag.loc);
             children.push(Box::new(tag) as Box<dyn View>);
         }
-        // println!("child len is {}", children.len());
-        // println!("-------");
+         println!("child len is {}", children.len());
+         println!("-------");
 
         About {
             overlay,
@@ -180,12 +180,12 @@ impl About {
 
         
         for tag in temp {
-            // println!("tag rects are {:?}", tag.rects);
-            // println!("Tag link is {:?}", tag.loc);
+             println!("tag rects are {:?}", tag.rects);
+             println!("Tag link is {:?}", tag.loc);
             self.children_mut().push(Box::new(tag) as Box<dyn View>);
         }
-        // println!("child len is {}", self.children.len());
-        // println!("-------");
+         println!("child len is {}", self.children.len());
+         println!("-------");
     }
 }
 

@@ -10,8 +10,7 @@ use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::view::textlabel::TextLabel;
 use crate::view::filler::Filler;
 use crate::font::{LABEL_STYLE};
-use crate::view::common::{locate, rlocate, locate_by_id};
-use crate::view::common::{toggle_main_menu, toggle_battery_menu, toggle_clock_menu};
+use crate::view::common::{locate, toggle_main_menu, toggle_battery_menu, toggle_clock_menu};
 use super::top_bar::TopBar;
 
 #[derive(Clone)]

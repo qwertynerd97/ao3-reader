@@ -71,7 +71,7 @@ You can install the importer with:
 2. The following compiles, mounts a local volume, and outputs the `plato` binary to your local folder `target/arm-unknown-linux-gnueabihf`:
 
 ```sh
-docker run --rm -t -v $(pwd)/target:/plato/target plato:armhf
+docker run --rm -t -v $(pwd):/plato plato:armhf
 ```
 
 You can copy the binary to your Kobo device (make sure you install an existing release first) and it will run.

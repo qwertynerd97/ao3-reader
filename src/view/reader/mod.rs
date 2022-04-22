@@ -426,6 +426,7 @@ impl Reader {
             doc: Arc::new(Mutex::new(Box::new(doc))),
             cache: BTreeMap::new(),
             text: FxHashMap::default(),
+            noninverted_regions: FxHashMap::default(),
             annotations: FxHashMap::default(),
             chunks: Vec::new(),
             focus: None,

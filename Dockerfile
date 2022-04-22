@@ -39,9 +39,9 @@ RUN rustup target add arm-unknown-linux-gnueabihf
 # Build plato
 WORKDIR /plato
 
-ADD . /plato
+# ADD . /plato
 
 # Plato requires a specific version of the mupdf dev library for src/mupdf_wrapper
-RUN cd /plato/thirdparty && ./download.sh mupdf
+# RUN cd /plato/thirdparty && ./download.sh mupdf
 
 CMD ["./build.sh"]
