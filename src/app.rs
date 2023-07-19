@@ -1065,7 +1065,8 @@ pub fn run() -> Result<(), Error> {
             },
             Event::ToggleAboutWork(info) => {
                 println!("Trying to open about work overlay");
-                let about_overlay = About::new(info, &mut context);
+                let mut about_overlay = About::new(info, &mut context);
+                about_overlay.update_page();
                 rq.add(RenderData::new(about_overlay.id(), *about_overlay.rect(), UpdateMode::Gui));
                 view.children_mut().push(Box::new(about_overlay) as Box<dyn View>);
              }

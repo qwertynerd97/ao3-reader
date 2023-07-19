@@ -599,7 +599,7 @@ pub enum Family {
     Display,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Style {
     family: Family,
     variant: Variant,

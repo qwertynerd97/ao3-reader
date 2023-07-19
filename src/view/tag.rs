@@ -1,3 +1,4 @@
+use std::fmt;
 use crate::device::CURRENT_DEVICE;
 use crate::font::{Fonts, Style, font_from_style, RenderPlan};
 use super::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData};
@@ -17,7 +18,14 @@ pub struct Tag {
     elements: Vec<(RenderPlan, Point)>,
     pub loc: Option<String>,
     style: Style,
-    has_loc: bool
+    has_loc: bool,
+    pub text: String
+}
+
+impl fmt::Debug for Tag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Tag [{}, {:?}]", self.text, self.loc)
+    }
 }
 
 impl Tag {
@@ -92,7 +100,8 @@ impl Tag {
             elements,
             loc,
             style,
-            has_loc
+            has_loc,
+            text
         }
     }
 
@@ -133,13 +142,16 @@ impl Tag {
         let mut line = 0;
         for rect in &self.rects {
             if rect.max.y > height {
-                break;
+                break
             }
             line += 1;
         }
 
+        // println!("{}", line);
+
         let rects = self.rects.split_off(line);
         let elements = self.elements.split_off(line);
+       // println!("split rects are {:?}", rects);
         Tag {
             id: ID_FEEDER.next(),
             active: self.active.clone(),
@@ -149,7 +161,8 @@ impl Tag {
             elements,
             loc: self.loc.clone(),
             style: self.style.clone(),
-            has_loc: self.has_loc.clone()
+            has_loc: self.has_loc.clone(),
+            text: self.text.clone()
         }
     }
 
@@ -169,7 +182,7 @@ impl View for Tag {
     }
 
     fn render(&self, fb: &mut dyn Framebuffer, _rect: Rectangle, fonts: &mut Fonts) {
-        println!("rendering {:?}", self.loc);
+        println!("rendering {:?}", self.text);
         let scheme = if self.active {
             TEXT_INVERTED_SOFT
         } else {
@@ -185,6 +198,7 @@ impl View for Tag {
         let dpi = CURRENT_DEVICE.dpi;
         let font = font_from_style(fonts, &self.style, dpi);
         for (plan, pt) in &self.elements {
+            println!("rendering text");
             font.render(fb, scheme[1], &plan, *pt);
         }
     }

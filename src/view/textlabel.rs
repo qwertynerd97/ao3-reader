@@ -117,7 +117,7 @@ impl View for TextLabel {
         let dx = self.align.offset(plan.width, self.rect.width() as i32);
         let dy = (self.rect.height() as i32 - x_height) / 2;
         let pt = pt!(self.rect.min.x + dx, self.rect.max.y - dy);
-
+        println!("rendering label {:?}", self.text);
         font.render(fb, scheme[1], &plan, pt);
     }
 

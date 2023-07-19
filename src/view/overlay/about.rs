@@ -12,6 +12,7 @@ use crate::font::{LABEL_STYLE, BOLD_STYLE, BOLD_TITLE, ABOUT_STYLE};
 use crate::view::tag::Tag;
 use crate::ao3_metadata::Ao3Info;
 use crate::helpers::ceil;
+use std::{thread, time};
 
 #[derive(Clone)]
 pub struct About {
@@ -47,18 +48,18 @@ impl About {
         items.push(("    by".to_string(), None, LABEL_STYLE));
         for author in info.authors {
             let temp = author.clone();
-            items.push((temp.title, Some(temp.location), LABEL_STYLE));
+            items.push((temp.title, None, LABEL_STYLE));
         }
         items.push(("Fandoms:".to_string(), None, BOLD_STYLE));
         for fandom in info.fandoms {
             let temp = fandom.clone();
-            items.push((temp.title, Some(temp.location), ABOUT_STYLE));
+            items.push((temp.title, None, ABOUT_STYLE));
         }
     
         items.push(("Tags:".to_string(), None, BOLD_STYLE));
         for tag in info.tags {
             let temp = tag.clone();
-            items.push((temp.title, Some(temp.location), ABOUT_STYLE));
+            items.push((temp.title, None, ABOUT_STYLE));
         }
 
         items.push(("Summary:".to_string(), None, BOLD_STYLE));
@@ -92,10 +93,12 @@ impl About {
                 start_x = if label {end_pt.x} else {end_pt.x + padding};
                 start_y += (lines as i32 - 1 ) * line_height;
             }
+            // println!("tag rects are {:?}", tag.rects);
+            // println!("Tag link is {:?}", tag.loc);
     
             tag_list.push(tag);
         }
-
+        println!("===================");
         // split items across pages
         let mut page = Vec::new();
         let mut index = Vec::new();
@@ -106,12 +109,15 @@ impl About {
         for mut tag in tag_list{
             let end_pt = tag.end_point().y;
 
-            if end_pt > (rect.max.y * pg_count){
+            if end_pt > ((rect.max.y - rect.min.y) * pg_count + rect.min.y){
                 if tag.lines() > 1 {
                     // we need to split a tag
-                    let split = rect.max.y * pg_count;
+                    let split = (rect.max.y - rect.min.y) * pg_count + rect.min.y;
                     // println!("Tag lines is {}, split is {}", tag.lines(), split);
                     let new_tag = tag.split(split);
+                    // println!("tag rects are {:?}", tag.rects);
+                    // println!("new tag rects are {:?}", new_tag.rects);
+
                     page.push(tag); 
                     i += 1;
                     index.push(i);
@@ -144,18 +150,20 @@ impl About {
         let max_pages = index.len();
         overlay.set_max(max_pages);
 
-        let end = if 1 < max_pages {index[1] as usize} else {page.len()};
+        // let end = if 1 < max_pages {index[1] as usize} else {page.len()};
+        // println!("end is {:?}", end);
 
-        let temp = Vec::from(&page[0..end]);
+        // let temp = Vec::from(&page[0..end]);
         let mut children = Vec::new();
         children.push(Box::new(overlay.clone()) as Box<dyn View>);
-        for tag in temp {
-             println!("tag rects are {:?}", tag.rects);
-             println!("Tag link is {:?}", tag.loc);
-            children.push(Box::new(tag) as Box<dyn View>);
-        }
-         println!("child len is {}", children.len());
-         println!("-------");
+        // for tag in temp {
+        //      //println!("tag rects are {:?}", tag.rects);
+        //      println!("Tag link is {:?}", tag.text);
+        //     children.push(Box::new(tag) as Box<dyn View>);
+        // }
+        //  println!("child len is {}", children.len());
+        //  println!("page len is {}", page.len());
+        //  println!("-------");
 
         About {
             overlay,
@@ -170,21 +178,30 @@ impl About {
     }
 
     pub fn update_page(&mut self) {
+        println!("updating page....");
         let start = self.index[self.current_page] as usize;
         let next = self.current_page + 1;
         let end = if next < self.max_pages {self.index[next] as usize} else {self.page.len()};
+        println!("start is {:?}", start);
+        println!("end is {:?}", end);
+        println!("next is {:?}", next);
 
         self.children_mut().drain(1..); // Remove old chapter items
+        println!("child len is {}", self.children.len());
+        println!("page len is {}", self.page.len());
         //let page_items = Vec::from_iter(self.page[start..end].iter().cloned());
         let temp = Vec::from(&self.page[start..end]);
 
+        // println!("temp len is {}", temp.len());
+        // println!("temp elements are {:?}", temp);
         
         for tag in temp {
-             println!("tag rects are {:?}", tag.rects);
-             println!("Tag link is {:?}", tag.loc);
-            self.children_mut().push(Box::new(tag) as Box<dyn View>);
+             //println!("tag rects are {:?}", tag.rects);
+             println!("Tag link is {:?}", tag.text);
+            self.children_mut().push(Box::new(tag.clone()) as Box<dyn View>);
         }
          println!("child len is {}", self.children.len());
+         println!("child elements are {:?}", self.children);
          println!("-------");
     }
 }
@@ -198,7 +215,8 @@ impl View for About {
                     CycleDir::Previous => if self.current_page > 0 {self.current_page = self.current_page - 1}
                 }
                 self.update_page();
-                rq.add(RenderData::new(self.id, *self.rect(), UpdateMode::Gui));
+                thread::sleep(time::Duration::from_secs(1));
+                rq.add(RenderData::new(self.id, *self.rect(), UpdateMode::Partial));
                 true
             },
             Event::LoadIndex(..) => {
