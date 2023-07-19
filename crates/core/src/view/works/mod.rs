@@ -7,35 +7,33 @@ mod bottom_bar;
 use std::fs;
 use std::path::{Path, PathBuf};
 use rand_core::RngCore;
-use anyhow::{Error, format_err};
+use anyhow::Error;
 use crate::library::Library;
 use crate::framebuffer::{Framebuffer, UpdateMode};
-use crate::metadata::{Metadata, SortMethod, BookQuery, SimpleStatus, sort};
+use crate::metadata::{Metadata, SortMethod, BookQuery, sort};
 use crate::view::{View, Event, Hub, Bus, RenderQueue, RenderData};
-use crate::view::{Id, ID_FEEDER, ViewId, EntryId, EntryKind};
+use crate::view::{Id, ID_FEEDER, ViewId, EntryId};
 use crate::view::{SMALL_BAR_HEIGHT, BIG_BAR_HEIGHT, THICKNESS_MEDIUM};
-use crate::settings::{Hook, LibraryMode, FirstColumn, SecondColumn};
+use crate::settings::LibraryMode;
 use crate::view::common::{toggle_main_menu, toggle_battery_menu, toggle_clock_menu};
 use crate::view::common::{locate, rlocate, locate_by_id};
 use crate::view::filler::Filler;
 use crate::view::keyboard::Keyboard;
 use crate::view::named_input::NamedInput;
-use crate::view::menu::{Menu, MenuKind};
-use crate::view::menu_entry::MenuEntry;
+use crate::view::menu::Menu;
 use crate::view::search_bar::SearchBar;
 use crate::view::notification::Notification;
 use super::top_bar::TopBar;
 use self::workindex::WorkIndex;
 use self::bottom_bar::BottomBar;
-use self::title_bar::TitleBar;
 use crate::gesture::GestureEvent;
-use crate::geom::{Rectangle, Dir, CycleDir, halves};
-use crate::input::{DeviceEvent, ButtonCode, ButtonStatus};
+use crate::geom::{Rectangle, halves};
+use crate::input::DeviceEvent;
 use crate::device::CURRENT_DEVICE;
 use crate::unit::scale_by_dpi;
 use crate::color::BLACK;
 use crate::font::Fonts;
-use crate::app::Context;
+use crate::context::Context;
 
 pub const TRASH_DIRNAME: &str = ".trash";
 
@@ -486,7 +484,7 @@ impl Works {
             if !trash_path.is_dir() {
                 fs::create_dir_all(&trash_path)?;
             }
-            let mut trash = Library::new(trash_path, LibraryMode::Database);
+            let mut trash = Library::new(trash_path, LibraryMode::Database)?;
             context.library.move_to(path, &mut trash)?;
             let (mut files, _) = trash.list(&trash.home, None, false);
             let mut size = files.iter().map(|info| info.file.size).sum::<u64>();

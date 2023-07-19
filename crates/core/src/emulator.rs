@@ -65,7 +65,7 @@ use crate::frontlight::{Frontlight, LightLevels};
 use crate::lightsensor::LightSensor;
 use crate::library::Library;
 use crate::font::Fonts;
-use crate::app::Context;
+use crate::context::Context;
 
 pub const APP_NAME: &str = "Plato";
 const DEFAULT_ROTATION: i8 = 1;

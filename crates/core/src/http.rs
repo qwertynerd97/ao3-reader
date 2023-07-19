@@ -5,9 +5,8 @@ use reqwest::blocking::{Client, RequestBuilder, Response};
 use reqwest::cookie::Jar;
 use reqwest::cookie::CookieStore;
 use std::sync::Arc;
-use std::convert::Into;
 use crate::settings::Settings;
-use crate::app::Context;
+use crate::context::Context;
 use crate::helpers::decode_entities;
 use serde::{Serialize, Deserialize};
 

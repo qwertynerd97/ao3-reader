@@ -599,7 +599,7 @@ impl Rectangle {
     }
 
     pub fn extends(&self, rect: &Rectangle) -> bool {
-        let dmin = *[self.width(), self.height(),
+        let dmin = [self.width(), self.height(),
                     rect.width(), rect.height()].into_iter().min().unwrap() as i32 / 3;
 
         // rect is on top of self.

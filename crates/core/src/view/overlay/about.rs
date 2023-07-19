@@ -1,17 +1,15 @@
-use crate::font::{Fonts, Style, font_from_style};
+use crate::font::{Fonts, font_from_style};
 use crate::view::{View, Event, Hub, Bus, RenderQueue,  ViewId, Id, ID_FEEDER, RenderData};
-use crate::view::{ BORDER_RADIUS_MEDIUM, SMALL_PADDING};
-use crate::app::Context;
+use crate::view::SMALL_PADDING;
+use crate::context::Context;
 use crate::unit::scale_by_dpi;
 use crate::geom::{Rectangle, CycleDir};
-use crate::document::{Location, Chapter};
 use crate::device::CURRENT_DEVICE;
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use super::Overlay;
 use crate::font::{LABEL_STYLE, BOLD_STYLE, BOLD_TITLE, ABOUT_STYLE};
 use crate::view::tag::Tag;
 use crate::ao3_metadata::Ao3Info;
-use crate::helpers::ceil;
 use std::{thread, time};
 
 #[derive(Clone)]

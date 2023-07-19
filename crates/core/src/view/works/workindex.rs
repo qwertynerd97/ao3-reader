@@ -1,6 +1,6 @@
 use crate::device::CURRENT_DEVICE;
 use crate::gesture::GestureEvent;
-use crate::font::{Fonts};
+use crate::font::Fonts;
 use rand_core::RngCore;
 use crate::color::{WHITE, SEPARATOR_NORMAL};
 use crate::geom::{Rectangle, CycleDir, Dir, halves, divide};
@@ -9,7 +9,7 @@ use crate::view::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData,
 use crate::view::{THICKNESS_MEDIUM, BIG_BAR_HEIGHT, SMALL_BAR_HEIGHT};
 use crate::input::{DeviceEvent, ButtonCode, ButtonStatus};
 use crate::unit::scale_by_dpi;
-use crate::app::Context;
+use crate::context::Context;
 use super::work::{Work, WorkView};
 use crate::view::filler::Filler;
 use crate::http::{scrape_many, scrape, scrape_many_outer};
@@ -17,7 +17,7 @@ use crate::ao3_metadata::str_to_usize;
 use regex::Regex;
 use crate::helpers::{ceil, get_url, update_url};
 use fxhash::FxHashMap;
-use url::{Url};
+use url::Url;
 use super::bottom_bar::BottomBar;
 use super::title_bar::TitleBar;
 
@@ -58,7 +58,7 @@ pub fn fetch_index(url: &Url, context: &Context) -> (IndexPage, usize, usize, St
     let max_works_data = scrape(&data, "h2.heading");
     let title = scrape(&data, "h2.heading a.tag");
     let max_page_data = scrape_many(&data, ".pagination li a");
-    let max_page_text = &max_page_data[(max_page_data.len() - 2)];
+    let max_page_text = &max_page_data[max_page_data.len() - 2];
     let max_page = str_to_usize(max_page_text.to_string());
 
     let max_works_re = Regex::new(r"\d+ - \d+ of (\d+) Works").unwrap();

@@ -40,3 +40,11 @@ rand_core = "0.6.4"
 rand_xoshiro = "0.6.0"
 percent-encoding = "2.3.0"
 chrono = { version = "0.4.26", features = ["serde", "clock"], default-features = false }
+scraper = "0.12.0"
+dyn-clone = "1.0.4"
+url = { version = "2", features = ["serde"] }
+
+[dependencies.reqwest]
+version = "0.11.9"
+default-features = false
+features = ["rustls-tls","json", "blocking", "cookies"]

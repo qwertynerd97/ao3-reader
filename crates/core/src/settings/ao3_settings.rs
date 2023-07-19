@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 use crate::helpers::url_strip_page;
-use url::{Url};
+use url::Url;
 use crate::view::works::work::WorkView;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,7 +33,7 @@ impl Ao3Settings {
         let pos = self.faves.iter().position(|fave| &fave.1 == &url);
         match pos {
             Some(i) => {self.faves.remove(i);},
-            None => (self.faves.push((title, url)))
+            None => self.faves.push((title, url))
         };
     }
 }

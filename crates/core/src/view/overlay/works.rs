@@ -1,16 +1,15 @@
 use super::Overlay;
-use super::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, ViewId, RenderData};
+use super::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, ViewId};
 use crate::view::MINI_BAR_HEIGHT;
 use crate::view::works::work::{Work, WorkView};
-use crate::view::tag::Tag;
-use crate::font::{Fonts, LABEL_STYLE};
+
+use crate::font::Fonts;
 use crate::framebuffer::Framebuffer;
-use super::{BORDER_RADIUS_MEDIUM, CLOSE_IGNITION_DELAY, SMALL_BAR_HEIGHT, BIG_BAR_HEIGHT};
+use super::{BORDER_RADIUS_MEDIUM, SMALL_BAR_HEIGHT, BIG_BAR_HEIGHT};
 use crate::unit::scale_by_dpi;
-use crate::app::Context;
+use crate::context::Context;
 use crate::device::CURRENT_DEVICE;
-use crate::geom::{Rectangle, CycleDir};
-use crate::document::Location;
+use crate::geom::Rectangle;
 
 #[derive(Clone)]
 pub struct WorksOverlay {

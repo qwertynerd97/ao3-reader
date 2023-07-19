@@ -1,10 +1,10 @@
 use crate::device::CURRENT_DEVICE;
 use crate::font::{Fonts, font_from_style, NORMAL_STYLE};
 use crate::color::{BLACK, WHITE};
-use crate::geom::{Rectangle};
+use crate::geom::Rectangle;
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use super::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData};
-use crate::app::Context;
+use crate::context::Context;
 
 #[derive(Clone)]
 pub struct WorksLabel {

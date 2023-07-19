@@ -591,7 +591,7 @@ bitflags! {
         const REGULAR = 0;
         const ITALIC = 1;
         const BOLD = 2;
-        const BOLDITALIC = Self::ITALIC.bits | Self::BOLD.bits;
+        const BOLDITALIC = Self::ITALIC.bits() | Self::BOLD.bits();
     }
 }
 

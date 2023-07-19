@@ -11,7 +11,7 @@ use crate::framebuffer::{Framebuffer, UpdateMode, Pixmap};
 use crate::gesture::GestureEvent;
 use crate::unit::{scale_by_dpi, mm_to_px};
 use crate::view::reader::{Resource, RenderChunk, RECT_DIST_JITTER};
-use crate::app::Context;
+use crate::context::Context;
 use crate::device::CURRENT_DEVICE;
 
 pub struct HtmlView {

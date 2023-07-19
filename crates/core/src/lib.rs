@@ -20,6 +20,8 @@ pub mod settings;
 pub mod font;
 pub mod context;
 pub mod gesture;
+mod ao3_metadata;
+pub mod http;
 
 pub use anyhow;
 pub use fxhash;

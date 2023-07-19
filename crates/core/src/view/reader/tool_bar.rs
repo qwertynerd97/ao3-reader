@@ -1,6 +1,6 @@
-use crate::framebuffer::{Framebuffer};
+use crate::framebuffer::Framebuffer;
 use crate::settings::ReaderSettings;
-use crate::metadata::{ReaderInfo};
+use crate::metadata::ReaderInfo;
 //use crate::metadata::{DEFAULT_CONTRAST_EXPONENT, DEFAULT_CONTRAST_GRAY};
 use crate::view::{Align,  View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, ViewId};
 // use crate::view::filler::Filler;
@@ -12,7 +12,6 @@ use crate::gesture::GestureEvent;
 use crate::input::DeviceEvent;
 use crate::geom::Rectangle;
 use crate::font::Fonts;
-use crate::color::{SEPARATOR_NORMAL, WHITE};
 use crate::context::Context;
 
 

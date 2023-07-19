@@ -20,6 +20,7 @@ use crate::device::CURRENT_DEVICE;
 use crate::library::Library;
 use crate::font::Fonts;
 use crate::rtc::Rtc;
+use crate::http::HttpClient;
 
 const KEYBOARD_LAYOUTS_DIRNAME: &str = "keyboard-layouts";
 const DICTIONARIES_DIRNAME: &str = "dictionaries";
@@ -46,21 +47,23 @@ pub struct Context {
     pub covered: bool,
     pub shared: bool,
     pub online: bool,
+    pub client: HttpClient,
 }
 
 impl Context {
     pub fn new(fb: Box<dyn Framebuffer>, rtc: Option<Rtc>, library: Library,
-               settings: Settings, fonts: Fonts, battery: Box<dyn Battery>,
+               mut settings: Settings, fonts: Fonts, battery: Box<dyn Battery>,
                frontlight: Box<dyn Frontlight>, lightsensor: Box<dyn LightSensor>) -> Context {
         let dims = fb.dims();
         let rotation = CURRENT_DEVICE.transformed_rotation(fb.rotation());
         let rng = Xoroshiro128Plus::seed_from_u64(Local::now().timestamp_nanos() as u64);
+        let client = HttpClient::new(&mut settings);
         Context { fb, rtc, display: Display { dims, rotation },
                   library, settings, fonts, dictionaries: BTreeMap::new(),
                   keyboard_layouts: BTreeMap::new(), input_history: FxHashMap::default(),
                   battery, frontlight, lightsensor, notification_index: 0,
                   kb_rect: Rectangle::default(), rng, plugged: false, covered: false,
-                  shared: false, online: false }
+                  shared: false, online: false, client: client }
     }
 
     pub fn batch_import(&mut self) {

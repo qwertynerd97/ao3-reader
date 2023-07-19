@@ -1,7 +1,7 @@
 use crate::font::Fonts;
 use crate::view::{View, Event, Hub, Bus, RenderQueue, Align, ViewId, Id, ID_FEEDER, RenderData};
 use crate::view::{MINI_BAR_HEIGHT, THICKNESS_MEDIUM, SMALL_PADDING, SMALL_BAR_HEIGHT};
-use crate::app::Context;
+use crate::context::Context;
 use crate::unit::scale_by_dpi;
 use crate::geom::{Rectangle, halves};
 use crate::color::{BLACK, WHITE};
@@ -9,7 +9,7 @@ use crate::device::CURRENT_DEVICE;
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::view::textlabel::TextLabel;
 use crate::view::filler::Filler;
-use crate::font::{LABEL_STYLE};
+use crate::font::LABEL_STYLE;
 use crate::view::common::{locate, toggle_main_menu, toggle_battery_menu, toggle_clock_menu};
 use super::top_bar::TopBar;
 

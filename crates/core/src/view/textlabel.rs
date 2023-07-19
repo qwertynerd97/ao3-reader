@@ -5,7 +5,7 @@ use crate::gesture::GestureEvent;
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::geom::Rectangle;
 use crate::color::{TEXT_NORMAL, TEXT_INVERTED_HARD};
-use crate::app::Context;
+use crate::context::Context;
 use crate::input::{DeviceEvent, FingerStatus};
 
 #[derive(Clone)]

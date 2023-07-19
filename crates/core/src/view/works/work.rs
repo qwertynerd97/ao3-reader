@@ -7,7 +7,7 @@ use crate::gesture::GestureEvent;
 use crate::ao3_metadata::Ao3Info;
 use crate::font::{Fonts, font_from_style};
 use crate::geom::{Rectangle, halves};
-use crate::app::Context;
+use crate::context::Context;
 use crate::http::list_to_str;
 use serde::{Serialize, Deserialize};
 

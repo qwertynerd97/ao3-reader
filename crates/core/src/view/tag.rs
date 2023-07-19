@@ -6,7 +6,7 @@ use crate::gesture::GestureEvent;
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::geom::{Rectangle, Point};
 use crate::color::{TEXT_BUMP_SMALL, TEXT_INVERTED_SOFT};
-use crate::app::Context;
+use crate::context::Context;
 
 #[derive(Clone)]
 pub struct Tag {

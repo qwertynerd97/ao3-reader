@@ -1,13 +1,13 @@
 use crate::view::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, THICKNESS_MEDIUM, Align};
-use crate::app::Context;
+use crate::context::Context;
 use crate::font::{Fonts, font_from_style, NORMAL_STYLE};
-use crate::geom::{Rectangle};
+use crate::geom::Rectangle;
 use crate::view::icon::Icon;
 use crate::view::label::Label;
-use url::{Url};
+use url::Url;
 use crate::device::CURRENT_DEVICE;
 use crate::framebuffer::{Framebuffer, UpdateMode};
-use crate::color::{KEYBOARD_BG, BLACK, WHITE};
+use crate::color::{BLACK, WHITE};
 use crate::view::filler::Filler;
 use crate::unit::scale_by_dpi;
 

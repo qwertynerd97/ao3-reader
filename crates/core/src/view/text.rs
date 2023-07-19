@@ -3,8 +3,8 @@ use crate::font::{Fonts, font_from_style, Style, RenderPlan};
 use super::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, Align};
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::geom::Rectangle;
-use crate::color::{TEXT_NORMAL};
-use crate::app::Context;
+use crate::color::TEXT_NORMAL;
+use crate::context::Context;
 
 #[derive(Clone)]
 pub struct Text {

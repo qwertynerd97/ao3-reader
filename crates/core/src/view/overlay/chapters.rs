@@ -1,17 +1,17 @@
 use crate::font::Fonts;
 use crate::view::{View, Event, Hub, Bus, RenderQueue, Align, ViewId, Id, ID_FEEDER, RenderData};
 use crate::view::{MINI_BAR_HEIGHT, THICKNESS_MEDIUM, SMALL_PADDING};
-use crate::app::Context;
+use crate::context::Context;
 use crate::unit::scale_by_dpi;
 use crate::geom::{Rectangle, CycleDir};
 use crate::document::{Location, Chapter};
-use crate::color::{BLACK};
+use crate::color::BLACK;
 use crate::device::CURRENT_DEVICE;
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::view::textlabel::TextLabel;
 use crate::view::filler::Filler;
 use super::Overlay;
-use crate::font::{LABEL_STYLE};
+use crate::font::LABEL_STYLE;
 use crate::helpers::ceil;
 
 #[derive(Clone)]

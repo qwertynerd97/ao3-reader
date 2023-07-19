@@ -8,15 +8,12 @@ use crate::view::battery::Battery;
 use crate::view::label::Label;
 use crate::geom::{Rectangle};
 use crate::font::Fonts;
-<<<<<<< HEAD:src/view/top_bar.rs
-use crate::app::Context;
 use crate::view::filler::Filler;
 use crate::unit::scale_by_dpi;
 use crate::color::BLACK;
 use crate::device::CURRENT_DEVICE;
-=======
 use crate::context::Context;
->>>>>>> upstream-master:crates/core/src/view/top_bar.rs
+
 
 #[derive(Debug, Clone)]
 pub struct TopBar {

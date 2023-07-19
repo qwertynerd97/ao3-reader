@@ -13,7 +13,7 @@ use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::gesture::GestureEvent;
 use crate::color::{BLACK, WHITE};
 use crate::unit::scale_by_dpi;
-use crate::app::Context;
+use crate::context::Context;
 
 #[derive(Clone)]
 pub struct Overlay {
