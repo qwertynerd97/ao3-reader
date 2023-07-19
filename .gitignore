@@ -14,9 +14,8 @@
 /css/*-user.css
 /hyphenation-patterns
 /dictionaries
-/src/mupdf_wrapper/*/
 /dist
-/standalone
+/bundle
 /plato-*.zip
 /thirdparty/*/*
 !/thirdparty/*/*kobo*

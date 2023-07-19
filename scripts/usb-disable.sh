@@ -13,7 +13,7 @@ case "$LOADED_MODULE" in
 				rmmod configfs
 				;;
 			*)
-				grep -q '^arcotg_udc\b' /proc/modules && rmmod arcotg_udc
+				[ "$PLATFORM" != mx6sl-ntx ] && rmmod arcotg_udc
 				;;
 		esac
 		;;
@@ -31,9 +31,11 @@ DISK=/dev/mmcblk
 PARTITION=${DISK}0p3
 MOUNT_ARGS="noatime,nodiratime,shortname=mixed,utf8"
 
-dosfsck -a -w "$PARTITION"
+FS_CORRUPT=0
+dosfsck -a -w "$PARTITION" || dosfsck -a -w "$PARTITION" || FS_CORRUPT=1
+[ "$FS_CORRUPT" -eq 1 ] && reboot
 
-mount -o "$MOUNT_ARGS" -t vfat "$PARTITION" /mnt/onboard
+mount -o "$MOUNT_ARGS" -t vfat "$PARTITION" /mnt/onboard || reboot
 
 PARTITION=${DISK}1p1
 

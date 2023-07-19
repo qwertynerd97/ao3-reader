@@ -5,13 +5,19 @@ if [ $# -lt 1 ]; then
 	exit 1
 fi
 
-WRAPPER_PATH=src/mupdf_wrapper
+if ! [ -e thirdparty/mupdf/include ]; then
+	cd thirdparty || exit 1
+	./download.sh mupdf
+	cd -
+fi
+
+WRAPPER_PATH=mupdf_wrapper
 TARGET_OS=$(uname -s)
 
 if ! [ -e "${WRAPPER_PATH}/${TARGET_OS}" ]; then
 	cd "$WRAPPER_PATH" || exit 1
 	./build.sh
-	cd ../..
+	cd -
 fi
 
 CMD=$1
@@ -19,10 +25,10 @@ shift
 
 case "$CMD" in
 	run_emulator)
-		cargo run --bin plato-emulator --features emulator "$@"
+		cargo run -p emulator "$@"
 		;;
 	install_importer)
-		cargo install --path . --bin plato-import --features importer "$@"
+		cargo install --path crates/importer "$@"
 		;;
 	*)
 		printf 'Unknown command: %s.\n' "$CMD" 1>&2

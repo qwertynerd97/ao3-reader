@@ -15,15 +15,17 @@ auto-share = false
 button-scheme = "natural"
 # The number of minutes of inactivity after which a device
 # will automatically go to sleep. *Zero* means *never*.
-auto-suspend = 30
+auto-suspend = 30.0
 # The delay, in days, after which a suspended device
 # will power off. *Zero* means *never*.
-auto-power-off = 3
+auto-power-off = 3.0
 # Formats used for the clock and the clock's pop-up menu.
 # The available specifiers are described at:
 # https://docs.rs/chrono/latest/chrono/format/strftime/index.html
 time-format = "%H:%M"
 date-format = "%A, %B %-d, %Y"
+# Appends the tapped external URLs to this file.
+external-urls-queue = "bin/article_fetcher/urls.txt"
 
 # You can create libraries by adding further [[libraries]] entries.
 [[libraries]]
@@ -56,6 +58,14 @@ first-column = "title-and-author"
 second-column = "progress"
 thumbnail-previews = true
 
+[[libraries]]
+name = "Dropbox"
+path = "/mnt/onboard/.kobo/dropbox"
+
+[[libraries]]
+name = "KePub"
+path = "/mnt/onboard/.kobo/kepub"
+
 # Defines the images displayed when entering an intermission.
 # Possible values: "logo:", "cover:", "/path/to/image/file".
 # If a relative file path is given, it will be relative to
@@ -83,6 +93,9 @@ finished = "close"
 # The action triggered when tapping the south-east corner.
 # Possible values: "go-to-page", "next-page".
 south-east-corner = "go-to-page"
+# The action triggered when making bottom right corner gesture.
+# Possible values: "toggle-dithered", "toggle-inverted".
+bottom-right-gesture = "toggle-dithered"
 # The action triggered when tapping the south strip.
 # Possible values: "toggle-bars", "next-page".
 south-strip = "toggle-bars"
@@ -113,6 +126,9 @@ min-margin-width = 0
 max-margin-width = 10
 # The default line height, in ems.
 line-height = 1.2
+# Determine the scroll mode used for the fit-to-width zoom mode
+# when opening a new document.
+continuous-fit-to-width = true
 # Whether to ignore the document's style sheets.
 ignore-document-css = false
 # The file extensions of the files that will automatically be dithered
@@ -136,6 +152,8 @@ inverted = 2
 unshare-trigger = true
 # Start the import process when *Plato* starts.
 startup-trigger = true
+# When a document changes, re-extract its metadata.
+sync-metadata = true
 # The file extensions of the documents for which the metadata extraction
 # process will occur.
 metadata-kinds = ["epub", "pdf", "djvu"]
