@@ -207,12 +207,12 @@ impl Works {
     }
 
     fn update_bottom_bar(&mut self, rq: &mut RenderQueue) {
-        // if let Some(index) = rlocate::<BottomBar>(self) {
-        //     let bottom_bar = self.children[index].as_mut().downcast_mut::<BottomBar>().unwrap();
-        //     bottom_bar.update_works_label(self.current_page, self.works_count, self.works_lines, rq);
-        //     bottom_bar.update_page_label(self.current_page, self.pages_count, rq);
-        //     bottom_bar.update_icons(self.current_page, self.pages_count, rq);
-        // }
+        if let Some(index) = rlocate::<BottomBar>(self) {
+            let bottom_bar = self.children[index].as_mut().downcast_mut::<BottomBar>().unwrap();
+            bottom_bar.update_works_label(self.current_page, self.works_count, self.works_lines, rq);
+            bottom_bar.update_page_label(self.current_page, self.pages_count, rq);
+            bottom_bar.update_icons(self.current_page, self.pages_count, rq);
+        }
     }
 
     fn toggle_keyboard(&mut self, enable: bool, update: bool, id: Option<ViewId>, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
@@ -842,6 +842,7 @@ impl View for Works {
         // }
 
         // Bottom bar.
+        
         let bottom_bar_index = rlocate::<BottomBar>(self).unwrap();
         index = bottom_bar_index;
 
@@ -900,6 +901,7 @@ impl View for Works {
         rq.add(RenderData::new(self.id, self.rect, UpdateMode::Full));
     }
 
+    
     fn rect(&self) -> &Rectangle {
         &self.rect
     }

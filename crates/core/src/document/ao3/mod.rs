@@ -1,5 +1,5 @@
 use std::io::Read;
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use fxhash::FxHashMap;
 use regex::Regex;
@@ -19,6 +19,7 @@ use super::html::layout::{StyleData, LoopContext};
 use super::html::layout::{RootData, DrawState, DrawCommand, TextCommand, ImageCommand};
 use super::html::layout::TextAlign;
 use super::html::style::StyleSheet;
+use super::html::css::CssParser;
 use super::html::xml::XmlParser;
 
 const VIEWER_STYLESHEET: &str = "css/epub.css";
@@ -112,7 +113,7 @@ impl Ao3Document {
             content,
             engine: Engine::new(),
             pages: Vec::new(),
-            parent: PathBuf::from(""),
+            parent: PathBuf::default(),
             size,
             viewer_stylesheet: PathBuf::from(VIEWER_STYLESHEET),
             user_stylesheet: PathBuf::from(USER_STYLESHEET),
@@ -201,40 +202,21 @@ impl Ao3Document {
         }
     }
 
-    fn images(&mut self, _loc: Location) -> Option<(Vec<Rectangle>, usize)> {
-        // if self.spine.is_empty() {
-        //     return None;
-        // }
 
-        // let offset = self.resolve_location(loc)?;
-        // let (index, start_offset) = self.vertebra_coordinates(offset)?;
-        // let page_index = self.page_index(offset, index, start_offset)?;
-
-        // self.cache.get(&index).map(|display_list| {
-        //     (display_list[page_index].iter().filter_map(|dc| {
-        //         match dc {
-        //             DrawCommand::Image(ImageCommand { rect, .. }) => Some(*rect),
-        //             _ => None,
-        //         }
-        //     }).collect(), offset)
-        // })
-
-        return None;
-    }
 
     fn build_pages(&mut self) -> Vec<Page> {
         let mut stylesheet = StyleSheet::new();
-        let spine_dir = PathBuf::from("");
+        let spine_dir = PathBuf::default();
 
-        // if let Ok(text) = fs::read_to_string(&self.viewer_stylesheet) {
-        //     let (mut css, _) = CssParser::new(&text).parse(RuleKind::Viewer);
-        //     stylesheet.append(&mut css);
-        // }
+        if let Ok(text) = fs::read_to_string(&self.viewer_stylesheet) {
+            let mut css = CssParser::new(&text).parse();
+            stylesheet.append(&mut css, true);
+        }
 
-        // if let Ok(text) = fs::read_to_string(&self.user_stylesheet) {
-        //     let (mut css, _) = CssParser::new(&text).parse(RuleKind::User);
-        //     stylesheet.append(&mut css);
-        // }
+        if let Ok(text) = fs::read_to_string(&self.user_stylesheet) {
+            let mut css = CssParser::new(&text).parse();
+            stylesheet.append(&mut css, true);
+        }
 
         // if !self.ignore_document_css {
         //     if let Some(head) = self.content.find("head") {
@@ -267,7 +249,8 @@ impl Ao3Document {
         let mut rect = self.engine.rect();
         rect.shrink(&self.engine.margin);
 
-        let language = self.content.root().find("html")
+        let language = self.content.root()
+                           .find("html")
                            .and_then(|html| html.attribute("xml:lang"))
                            .map(String::from);
 
@@ -440,16 +423,6 @@ impl Document for Ao3Document {
         scrape_csrf(&self.parsed_doc)
     }
 
-    fn set_hyphen_penalty(&mut self, hyphen_penalty: i32) {
-        self.engine.set_hyphen_penalty(hyphen_penalty);
-        self.pages.clear();
-    }
-
-    fn set_stretch_tolerance(&mut self, stretch_tolerance: f32) {
-        self.engine.set_stretch_tolerance(stretch_tolerance);
-        self.pages.clear();
-    }
-
     fn work_id(&self) -> String {
         let mut work_id = "".to_string();
         if let Some(unwrapped_url) = &self.url {
@@ -458,23 +431,6 @@ impl Document for Ao3Document {
             work_id = caps[1].to_string();
         }
         work_id
-    }
-
-    fn images(&mut self, loc: Location) -> Option<(Vec<Boundary>, usize)> {
-        let offset = self.resolve_location(loc)?;
-        let page_index = self.page_index(offset)?;
-
-        Some((self.pages[page_index].iter().filter_map(|dc| {
-            match dc {
-                DrawCommand::Image(ImageCommand { rect, .. }) => Some((*rect).into()),
-                _ => None,
-            }
-        }).collect(), offset))
-    }
-
-    fn set_ignore_document_css(&mut self, ignore: bool) {
-        self.ignore_document_css = ignore;
-        self.pages.clear();
     }
 
     fn toc(&mut self) -> Option<Vec<TocEntry>> {
@@ -614,6 +570,27 @@ impl Document for Ao3Document {
         None
     }
 
+    fn images(&mut self, _loc: Location) -> Option<(Vec<Boundary>, usize)> {
+        // if self.spine.is_empty() {
+        //     return None;
+        // }
+
+        // let offset = self.resolve_location(loc)?;
+        // let (index, start_offset) = self.vertebra_coordinates(offset)?;
+        // let page_index = self.page_index(offset, index, start_offset)?;
+
+        // self.cache.get(&index).map(|display_list| {
+        //     (display_list[page_index].iter().filter_map(|dc| {
+        //         match dc {
+        //             DrawCommand::Image(ImageCommand { rect, .. }) => Some(*rect),
+        //             _ => None,
+        //         }
+        //     }).collect(), offset)
+        // })
+
+        return None;
+    }
+
     fn links(&mut self, loc: Location) -> Option<(Vec<BoundedText>, usize)> {
         let offset = self.resolve_location(loc)?;
         let page_index = self.page_index(offset)?;
@@ -664,6 +641,21 @@ impl Document for Ao3Document {
 
     fn set_line_height(&mut self, line_height: f32) {
         self.engine.set_line_height(line_height);
+        self.pages.clear();
+    }
+
+    fn set_hyphen_penalty(&mut self, hyphen_penalty: i32) {
+        self.engine.set_hyphen_penalty(hyphen_penalty);
+        self.pages.clear();
+    }
+
+    fn set_stretch_tolerance(&mut self, stretch_tolerance: f32) {
+        self.engine.set_stretch_tolerance(stretch_tolerance);
+        self.pages.clear();
+    }
+
+    fn set_ignore_document_css(&mut self, ignore: bool) {
+        self.ignore_document_css = ignore;
         self.pages.clear();
     }
 
