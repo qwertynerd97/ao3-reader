@@ -5,7 +5,7 @@ use std::env;
 use std::ops::Index;
 use std::fmt::{self, Debug};
 use std::path::PathBuf;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use fxhash::FxHashSet;
 use serde::{Serialize, Deserialize};
 use crate::metadata::{SortMethod, TextAlign};
@@ -312,6 +312,15 @@ pub struct HomeSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct RefreshRateSettings {
+    #[serde(flatten)]
+    pub global: RefreshRatePair,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub by_kind: HashMap<String, RefreshRatePair>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct RefreshRatePair {
     pub regular: u8,
     pub inverted: u8,
 }
@@ -405,8 +414,8 @@ pub enum WestStripAction {
 impl Default for RefreshRateSettings {
     fn default() -> Self {
         RefreshRateSettings {
-            regular: 8,
-            inverted: 2,
+            global: RefreshRatePair { regular: 8, inverted: 2 },
+            by_kind: HashMap::new(),
         }
     }
 }
@@ -468,7 +477,7 @@ impl Default for ImportSettings {
             startup_trigger: true,
             sync_metadata: true,
             metadata_kinds: ["epub", "pdf", "djvu"].iter().map(|k| k.to_string()).collect(),
-            allowed_kinds: ["pdf", "djvu", "epub", "fb2",
+            allowed_kinds: ["pdf", "djvu", "epub", "fb2", "txt",
                             "xps", "oxps", "mobi", "cbz"].iter().map(|k| k.to_string()).collect(),
         }
     }

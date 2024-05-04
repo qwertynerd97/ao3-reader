@@ -49,7 +49,8 @@ use plato_core::context::Context;
 pub const APP_NAME: &str = "Plato";
 const FB_DEVICE: &str = "/dev/fb0";
 const RTC_DEVICE: &str = "/dev/rtc0";
-const TOUCH_INPUTS: [&str; 4] = ["/dev/input/by-path/platform-1-0038-event",
+const TOUCH_INPUTS: [&str; 5] = ["/dev/input/by-path/platform-2-0010-event",
+                                 "/dev/input/by-path/platform-1-0038-event",
                                  "/dev/input/by-path/platform-1-0010-event",
                                  "/dev/input/by-path/platform-0-0010-event",
                                  "/dev/input/event1"];
@@ -57,8 +58,9 @@ const BUTTON_INPUTS: [&str; 4] = ["/dev/input/by-path/platform-gpio-keys-event",
                                   "/dev/input/by-path/platform-ntx_event0-event",
                                   "/dev/input/by-path/platform-mxckpd-event",
                                   "/dev/input/event0"];
-const POWER_INPUTS: [&str; 2] = ["/dev/input/by-path/platform-bd71828-pwrkey-event",
-                                 "/dev/input/by-path/platform-bd71828-pwrkey.4.auto-event"];
+const POWER_INPUTS: [&str; 3] = ["/dev/input/by-path/platform-bd71828-pwrkey.6.auto-event",
+                                 "/dev/input/by-path/platform-bd71828-pwrkey.4.auto-event",
+                                 "/dev/input/by-path/platform-bd71828-pwrkey-event"];
 
 const KOBO_UPDATE_BUNDLE: &str = "/mnt/onboard/.kobo/KoboRoot.tgz";
 
@@ -70,13 +72,7 @@ const PREPARE_SUSPEND_WAIT_DELAY: Duration = Duration::from_secs(3);
 
 struct Task {
     id: TaskId,
-    chan: Receiver<()>,
-}
-
-impl Task {
-    fn has_occurred(&self) -> bool {
-        self.chan.try_recv() == Ok(())
-    }
+    _chan: Receiver<()>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -142,7 +138,8 @@ fn build_context(fb: Box<dyn Framebuffer>) -> Result<Context, Error> {
 fn schedule_task(id: TaskId, event: Event, delay: Duration, hub: &Sender<Event>, tasks: &mut Vec<Task>) {
     let (ty, ry) = mpsc::channel();
     let hub2 = hub.clone();
-    tasks.push(Task { id, chan: ry });
+    tasks.retain(|task| task.id != id);
+    tasks.push(Task { id, _chan: ry });
     thread::spawn(move || {
         thread::sleep(delay);
         if ty.send(()).is_ok() {
@@ -206,6 +203,7 @@ fn set_wifi(enable: bool, context: &mut Context) {
     }
 }
 
+#[derive(PartialEq)]
 enum ExitStatus {
     Quit,
     Reboot,
@@ -229,6 +227,9 @@ pub fn run() -> Result<(), Error> {
     }
 
     let mut context = build_context(fb).context("can't build context")?;
+
+    context.plugged = context.battery.status().is_ok_and(|v| v[0].is_wired());
+
     set_wifi(true, &mut context);
     context.client.test_login();
     // if !context.client.test_login() {
@@ -380,6 +381,10 @@ pub fn run() -> Result<(), Error> {
                         }
                     },
                     DeviceEvent::CoverOn => {
+                        if context.covered {
+                           continue;
+                        }
+
                         context.covered = true;
 
                         if !context.settings.sleep_cover || context.shared ||
@@ -396,18 +401,13 @@ pub fn run() -> Result<(), Error> {
                         view.children_mut().push(Box::new(interm) as Box<dyn View>);
                     },
                     DeviceEvent::CoverOff => {
-                        context.covered = false;
-
-                        if context.shared {
-                            continue;
+                        if !context.covered {
+                           continue;
                         }
 
-                        if !context.settings.sleep_cover {
-                            if tasks.iter().any(|task| task.id == TaskId::Suspend && task.has_occurred()) {
-                                tasks.retain(|task| task.id != TaskId::Suspend);
-                                schedule_task(TaskId::Suspend, Event::Suspend,
-                                              SUSPEND_WAIT_DELAY, &tx, &mut tasks);
-                            }
+                        context.covered = false;
+
+                        if context.shared || !context.settings.sleep_cover {
                             continue;
                         }
 
@@ -454,10 +454,7 @@ pub fn run() -> Result<(), Error> {
 
                         match power_source {
                             PowerSource::Wall => {
-                                if tasks.iter().any(|task| task.id == TaskId::Suspend && task.has_occurred()) {
-                                    tasks.retain(|task| task.id != TaskId::Suspend);
-                                    schedule_task(TaskId::Suspend, Event::Suspend,
-                                                  SUSPEND_WAIT_DELAY, &tx, &mut tasks);
+                                if tasks.iter().any(|task| task.id == TaskId::Suspend) {
                                     continue;
                                 }
                             },
@@ -528,12 +525,8 @@ pub fn run() -> Result<(), Error> {
                             context.plugged = false;
                             schedule_task(TaskId::CheckBattery, Event::CheckBattery,
                                           BATTERY_REFRESH_INTERVAL, &tx, &mut tasks);
-                            if tasks.iter().any(|task| task.id == TaskId::Suspend && task.has_occurred()) {
-                                if context.covered {
-                                    tasks.retain(|task| task.id != TaskId::Suspend);
-                                    schedule_task(TaskId::Suspend, Event::Suspend,
-                                                  SUSPEND_WAIT_DELAY, &tx, &mut tasks);
-                                } else {
+                            if tasks.iter().any(|task| task.id == TaskId::Suspend) {
+                                if !context.covered {
                                     resume(TaskId::Suspend, &mut tasks, view.as_mut(), &tx, &mut rq, &mut context);
                                 }
                             } else {
@@ -620,30 +613,39 @@ pub fn run() -> Result<(), Error> {
                            .ok();
                     });
                 }
-                println!("{}", Local::now().format("Went to sleep on %B %-d, %Y at %H:%M."));
+                let before = Local::now();
+                println!("{}", before.format("Went to sleep on %B %-d, %Y at %H:%M:%S."));
                 Command::new("scripts/suspend.sh")
                         .status()
                         .ok();
-                println!("{}", Local::now().format("Woke up on %B %-d, %Y at %H:%M."));
+                let after = Local::now();
+                println!("{}", after.format("Woke up on %B %-d, %Y at %H:%M:%S."));
                 Command::new("scripts/resume.sh")
                         .status()
                         .ok();
                 inactive_since = Instant::now();
+                // If the wake is legitimate, the task will be cancelled by `resume`.
+                schedule_task(TaskId::Suspend, Event::Suspend,
+                              SUSPEND_WAIT_DELAY, &tx, &mut tasks);
                 if context.settings.auto_power_off > 0.0 {
-                    if let Some(enabled) = context.rtc.as_ref()
-                                                  .and_then(|rtc| rtc.is_alarm_enabled()
-                                                                     .map_err(|e| eprintln!("Can't get alarm: {:#}", e))
-                                                                     .ok()) {
-                        if enabled {
+                    let dur = plato_core::chrono::Duration::seconds((86_400.0 * context.settings.auto_power_off) as i64);
+                    if let Some(fired) = context.rtc.as_ref()
+                                                .and_then(|rtc| rtc.alarm()
+                                                                   .map_err(|e| eprintln!("Can't get alarm: {:#}", e))
+                                                                   .map(|rwa| !rwa.enabled() ||
+                                                                              (rwa.year() <= 1970 &&
+                                                                               ((after - before) - dur).num_seconds().abs() < 3))
+                                                                   .ok()) {
+                        if fired {
+                            power_off(view.as_mut(), &mut history, &mut updating, &mut context);
+                            exit_status = ExitStatus::PowerOff;
+                            break;
+                        } else {
                             context.rtc.iter().for_each(|rtc| {
                                 rtc.disable_alarm()
                                    .map_err(|e| eprintln!("Can't disable alarm: {:#}.", e))
                                    .ok();
                             });
-                        } else {
-                            power_off(view.as_mut(), &mut history, &mut updating, &mut context);
-                            exit_status = ExitStatus::PowerOff;
-                            break;
                         }
                     }
                 }
@@ -1096,7 +1098,7 @@ pub fn run() -> Result<(), Error> {
         }
     }
 
-    if !CURRENT_DEVICE.has_gyroscope() && context.display.rotation != initial_rotation {
+    if exit_status == ExitStatus::Quit && !CURRENT_DEVICE.has_gyroscope() && context.display.rotation != initial_rotation {
         context.fb.set_rotation(initial_rotation).ok();
     }
 

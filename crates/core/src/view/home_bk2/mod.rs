@@ -470,6 +470,7 @@ impl Home {
                 }
             }
 
+            context.kb_rect = Rectangle::default();
             hub.send(Event::Focus(None)).ok();
             if update {
                 let rect = rect![self.rect.min.x, y_min,

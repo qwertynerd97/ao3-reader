@@ -1,17 +1,13 @@
 [package]
 authors = ["Bastien Dejean <nihilhill@gmail.com>"]
-name = "plato"
+name = "emulator"
 version = "0.9.42"
 edition = "2021"
 
 [[bin]]
-name = "plato"
+name = "plato-emulator"
 path = "src/main.rs"
 
 [dependencies]
 plato-core = { path = "../core" }
-
-[dependencies.reqwest]
-version = "0.11.9"
-default-features = false
-features = ["rustls-tls","json", "blocking", "cookies"]
+sdl2 = "0.36.0"
