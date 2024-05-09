@@ -67,6 +67,7 @@ use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::input::{DeviceEvent, FingerStatus};
 use crate::gesture::GestureEvent;
 use self::key::KeyKind;
+use self::works::HistoryView;
 use crate::ao3_metadata::Ao3Info;
 use crate::context::Context;
 
@@ -315,9 +316,7 @@ pub enum Event {
     Keyboard(KeyboardEvent),
     Key(KeyKind),
     Open(Box<Info>),
-    OpenWork(String),
     OpenHtml(String, Option<String>),
-    LoadIndex(String),
     LoadPixmap(usize),
     Update(UpdateMode),
     RefreshBookPreview(PathBuf, Option<PathBuf>),
@@ -327,7 +326,6 @@ pub enum Event {
     ResultsPage(CycleDir),
     GoTo(usize),
     GoToLocation(Location),
-    GoToTag(String),
     ResultsGoTo(usize),
     CropMargins(Box<Margin>),
     Chapter(CycleDir),
@@ -341,12 +339,6 @@ pub enum Event {
     Define(String),
     Submit(ViewId, String),
     Slider(SliderId, f32, FingerStatus),
-    ShowOverlay(String),
-    ToggleAbout,
-    ToggleToc,
-    ToggleFaveIcon,
-    ToggleFave(String, Url),
-    Kudos,
     ToggleNear(ViewId, Rectangle),
     ToggleInputHistoryMenu(ViewId, Rectangle),
     ToggleBookMenu(Rectangle, usize),
@@ -354,7 +346,6 @@ pub enum Event {
     SubMenu(Rectangle, Vec<EntryKind>),
     History(CycleDir, bool),
     Toggle(ViewId),
-    ToggleAboutWork(Ao3Info),
     Show(ViewId),
     Close(ViewId),
     CloseSub(ViewId),
@@ -392,6 +383,19 @@ pub enum Event {
     Back,
     Quit,
     WakeUp,
+
+    // Ao3Reader-specific Events
+    ToggleAboutWork(Ao3Info),
+    ShowOverlay(String),
+    ToggleAbout,
+    ToggleToc,
+    ToggleFaveIcon,
+    ToggleFave(String, Url),
+    Kudos,
+    GoToTag(String),
+    LoadIndex(String),
+    LoadHistory(HistoryView),
+    OpenWork(String),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

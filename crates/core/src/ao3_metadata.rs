@@ -91,7 +91,7 @@ impl Default for Ao3Info {
             comments: 0,
             words: 0,
             bookmarks: 0,
-            updated: NaiveDate::from_ymd(1970, 1, 1)
+            updated: NaiveDate::MIN
         }
     }
 }
@@ -110,7 +110,7 @@ impl Ao3Info {
             id = caps[1].to_string();
         }
         let datetime = scrape(&html, ".datetime");
-        let updated = NaiveDate::parse_from_str(&datetime, "%d %b %Y").unwrap_or(NaiveDate::from_ymd(1970, 1, 1));
+        let updated = NaiveDate::parse_from_str(&datetime, "%d %b %Y").unwrap_or(NaiveDate::MIN);
         let title = scrape(&html, "h4.heading a");
         let authors = scrape_link_list(&html, r#"a[rel="author"]"#);
         let fandoms = scrape_link_list(&html, ".fandoms a");
@@ -148,7 +148,7 @@ impl Ao3Info {
         // TODO: req tags implementation
 
         let datetime = scrape(&html, ".status");
-        let updated = NaiveDate::parse_from_str(&datetime, "%Y-%b-%d").unwrap_or(NaiveDate::from_ymd(1970, 1, 1));
+        let updated = NaiveDate::parse_from_str(&datetime, "%Y-%b-%d").unwrap_or(NaiveDate::MIN);
         let title = scrape(&header, "h2.title");
         let authors = scrape_link_list(&header, r#"a[rel="author"]"#);
         let fandoms = scrape_link_list(&html, ".fandom a");

@@ -11,10 +11,12 @@ use crate::helpers::decode_entities;
 use serde::{Serialize, Deserialize};
 
 const AO3: &str = "https://archiveofourown.org";
+const AO3_LOGIN: &str = "https://archiveofourown.org/users/login";
+const AO3_FAILED_LOGIN: &str = "The password or user name you entered doesn't match our records.";
 
 pub struct HttpClient{
     client: Client,
-    logged_in: bool,
+    pub logged_in: bool,
     cookie_set: bool,
     cookies: Arc<Jar>
 }
@@ -47,15 +49,20 @@ pub fn test_login(res: Result<Response, Error>, cookie_set: bool) -> bool {
     let mut logged_in = cookie_set;
     match res {
         Ok(r) => {
-            let cookies = r.cookies();
-            for cookie in cookies {
-                if cookie.name() == "user_credentials" && cookie.value() == "1" {
-                    logged_in = true;
-                }
-                if cookie.name() == "user_credentials" && cookie.value() == "" {
-                    logged_in = false;
-                }
-            }
+            let text = r.text();
+                match text {
+                    Ok(t) => {
+                        if t.contains(AO3_FAILED_LOGIN) {
+                            logged_in = false;
+                        } else {
+                            logged_in = true;
+                        }
+                    },
+                    Err(e) =>{ 
+                        format!("There was an error logging in: {}", e);
+                        logged_in = false;
+                    },
+                };
         },
         Err(e) => { println!("{}", e) }
     };
@@ -78,7 +85,7 @@ pub fn scrape_inner_text(frag: &Html, select: &str) -> String{
 }
 
 pub fn scrape_csrf(frag: &Html) -> String {
-    let token = Selector::parse(r#"input[name="authenticity_token"]"#).unwrap();
+    let token = Selector::parse(r#"form.new_user input[name="authenticity_token"]"#).unwrap();
     let input = frag.select(&token).next().unwrap();
     input.value().attr("value").unwrap().to_string()
 }
@@ -176,14 +183,6 @@ impl HttpClient {
         let cookie_jar = Jar::default();
         let mut cookie_set = false;
 
-        let url = AO3.parse::<Url>().unwrap();
-        // cookie_jar.add_cookie_str("_otwarchive_session=NW9hYmtlem9LcjE0dlE4WWJXUUpjTGxZRUhCV0sxSmNMaXJxRi81Mjd5d2owTU13ODVRM2g5REtFcjgvS1VNb2VtYktFN3djWWJBYkwyZ3JzUjhoMkNNVU5vM080bDRzVFN6K2xVWXhVRlUvQzZYT0RSQVkxWnpxWlBmb0ZlbVNMN3Q3VEFFZUdsRjFxQzNFV1N4RmRrb0lpRVUxdS8vZG04WnQxOFFKVFBBbkI5cy9UVGJiTWRhalQ1Vkh4cW50YjdiaHRFL0JPQUVLMDEyRkpBRGxQYVcxRlI2N0FieXh6VHU4a0k3TEpKc1h0VnA3RGRLb0VVcmYvN3A3VUh5K0NYSTZQOEtvRjhvbDRibExmanltNlp0ZmxzRG55emtYeENRc3R4ZE0vL2tkd0VDS1VGTHYybERyaktEVmxteFQ2YkdUa1NRdGVHNWZNcXZDc0I3OTIyNzk1WmV1WGU1ajQ3bWNPdGJrLzFPa3VTVk81RjYvNzd6aW5vd0Y2MlRFaDYwME4xbnFQWVFnSzRNRTQ5ZGZrdz09LS02VVpFYmZRcW9tOVgzbjFjckRtbkh3PT0%3D--fc6de192acb90c3cf4652bafe8dcf2848fae70f9; path=/; expires=Fri, 02 Jul 2021 00:46:22 GMT; HttpOnly", &url);
-        // cookie_jar.add_cookie_str("user_credentials=1; path=/;", &url);
-        // cookie_set = true;
-
-        // let get_cookies = cookie_jar.cookies(&url);
-        // println!("{:?}", get_cookies);
-
         if settings.ao3.remember_me {
             let url = AO3.parse::<Url>().unwrap();
             match settings.ao3.clone().login_cookie {
@@ -258,26 +257,23 @@ impl HttpClient {
         if !self.cookie_set {
             return false;
         } else {
-            println!("testing login");
             return test_login(res, self.cookie_set);
         }
         
     }
 
     pub fn login(&mut self, user: &str, password: &str) {
-        let html = self.get_parse("https://archiveofourown.org");
+        let html = self.get_parse(AO3_LOGIN);
         let token = scrape_csrf(&html);
         let params=[("user[login]", user), 
                     ("user[password]", password), 
-                    ("commit", "Log+In"), 
-                    ("utf8", "✓"),
+                    ("user[remember_me]", "1"),
                     ("authenticity_token", &token) ];
 
-        let res = self.client.post("https://archiveofourown.org/users/login")
+        let res = self.client.post(AO3_LOGIN)
             .form(&params)
             .send();
         let logged_in = test_login(res, self.cookie_set);
-        println!("trying to log in");
         self.logged_in = logged_in;
 
     }

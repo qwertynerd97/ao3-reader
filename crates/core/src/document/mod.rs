@@ -19,7 +19,7 @@ use nix::sys::statvfs;
 use nix::sys::sysinfo;
 use fxhash::FxHashMap;
 use unicode_normalization::UnicodeNormalization;
-use unicode_normalization::char::{is_combining_mark};
+use unicode_normalization::char::is_combining_mark;
 use serde::{Serialize, Deserialize};
 use self::pdf::PdfOpener;
 use self::epub::EpubDocument;

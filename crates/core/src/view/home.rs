@@ -1,4 +1,4 @@
-use crate::font::Fonts;
+use crate::font::{Fonts, BOLD_STYLE};
 use crate::view::{View, Event, Hub, Bus, RenderQueue, Align, ViewId, Id, ID_FEEDER, RenderData};
 use crate::view::{MINI_BAR_HEIGHT, THICKNESS_MEDIUM, SMALL_PADDING, SMALL_BAR_HEIGHT};
 use crate::context::Context;
@@ -39,7 +39,7 @@ impl Home {
 
         let padding = scale_by_dpi(SMALL_PADDING, dpi) as i32;
         let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
-        let (small_thickness, big_thickness) = halves(thickness);
+        let (_small_thickness, big_thickness) = halves(thickness);
         let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
 
         let top_bar = TopBar::new(rect![rect.min.x, rect.min.y,
@@ -81,6 +81,17 @@ impl Home {
         x_max, start_y + thickness];
         let sep = Filler::new(sep_rect, BLACK);
         children.push(Box::new(sep) as Box<dyn View>);
+        
+        // Link to 'Marked for Later' view
+        if context.client.logged_in {
+            let label_rect = rect![x_min, start_y + thickness,
+            x_max, start_y + row_height];
+            let history = TextLabel::new(label_rect,
+                "Marked For Later".to_string(),
+                Align::Left(padding), BOLD_STYLE, Event::LoadHistory(super::works::HistoryView::MarkedForLater));
+                children.push(Box::new(history) as Box<dyn View>);
+
+        }
 
         rq.add(RenderData::new(id, rect, UpdateMode::Full));
     
@@ -138,7 +149,7 @@ impl View for Home {
         }
     }
 
-    fn render(&self, fb: &mut dyn Framebuffer, rect: Rectangle, fonts: &mut Fonts) {
+    fn render(&self, _fb: &mut dyn Framebuffer, _rect: Rectangle, _fonts: &mut Fonts) {
     }
 
     fn rect(&self) -> &Rectangle {

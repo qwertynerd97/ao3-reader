@@ -22,10 +22,9 @@ No, but you're welcome to fork this and do it yourself! The changes I've already
 * Will crash immediately on load if it can't reach Ao3 (either because of lack of wifi or because the site is down)
 * Works with anonymous authors will show as having no authors
 * Changing reader display settings doesn't alter current reader instances
-* About Work overlay currently missing summary/stats items
-* About Work overlay pages past the 1st not accessible due to positioning
+* About Work overlay currently missing stats items
+* Summary in About Work overlay ignores HTML styling
 * Bookmarks icon does nothing.
-* 'Go To Page' doesn't work in work index
 
 ## To be Done:
 * Other views (Author, Series, Bookmarks, Collections)

@@ -1,5 +1,5 @@
 use crate::device::CURRENT_DEVICE;
-use crate::font::{Fonts, font_from_style, NORMAL_STYLE, Style, RenderPlan};
+use crate::font::{Fonts, font_from_style, Style, RenderPlan};
 use super::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, Align};
 use crate::gesture::GestureEvent;
 use crate::framebuffer::{Framebuffer, UpdateMode};
@@ -111,13 +111,12 @@ impl View for TextLabel {
 
         let plan = &self.get_plan(fonts);
 
-        let font = font_from_style(fonts, &NORMAL_STYLE, dpi);
+        let font = font_from_style(fonts, &self.font, dpi);
         let x_height = font.x_heights.0 as i32;
 
         let dx = self.align.offset(plan.width, self.rect.width() as i32);
         let dy = (self.rect.height() as i32 - x_height) / 2;
         let pt = pt!(self.rect.min.x + dx, self.rect.max.y - dy);
-        println!("rendering label {:?}", self.text);
         font.render(fb, scheme[1], &plan, pt);
     }
 

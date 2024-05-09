@@ -3,6 +3,7 @@ use crate::view::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData,
 use crate::view::icon::Icon;
 use crate::view::filler::Filler;
 use crate::view::page_label::PageLabel;
+use super::work;
 use super::works_label::WorksLabel;
 use crate::geom::{Rectangle, CycleDir, halves};
 use crate::color::WHITE;
@@ -22,7 +23,7 @@ pub struct BottomBar {
 }
 
 impl BottomBar {
-    pub fn new(rect: Rectangle, current_page: usize, pages_count: usize, works_count: usize, maxlines: usize) -> BottomBar {
+    pub fn new(rect: Rectangle, current_page: usize, pages_count: usize, works_count: Option<usize>, maxlines: usize) -> BottomBar {
         let id = ID_FEEDER.next();
         let dpi = CURRENT_DEVICE.dpi;
         let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
@@ -44,12 +45,19 @@ impl BottomBar {
         }
 
         let (small_half_width, big_half_width) = halves(rect.width() as i32 - 2 * side);
-        let works_label = WorksLabel::new(rect![rect.min.x + side, rect.min.y + thickness,
-                                                    rect.min.x + side + small_half_width, rect.max.y],
-                                              current_page,
-                                              works_count,
-                                              maxlines);
-        children.push(Box::new(works_label) as Box<dyn View>);
+        let works_label_rect = rect![rect.min.x + side, rect.min.y + thickness,
+        rect.min.x + side + small_half_width, rect.max.y];
+           if let Some(works_count) = works_count {
+                let works_label = WorksLabel::new(works_label_rect,
+              current_page,
+              works_count,
+              maxlines);
+children.push(Box::new(works_label) as Box<dyn View>);
+            } else {
+                let blank = Filler::new(works_label_rect, WHITE);
+                children.push(Box::new(blank) as Box<dyn View>);
+            }
+
 
         let page_label = PageLabel::new(rect![rect.max.x - side - big_half_width, rect.min.y + thickness,
                                               rect.max.x - side, rect.max.y],

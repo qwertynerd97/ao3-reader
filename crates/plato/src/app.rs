@@ -6,6 +6,7 @@ use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
+use plato_core::view::works::HistoryView;
 use reqwest::blocking::Client;
 use reqwest::redirect::Policy;
 use reqwest::StatusCode;
@@ -32,7 +33,7 @@ use plato_core::frontlight::{Frontlight, StandardFrontlight, NaturalFrontlight, 
 use plato_core::lightsensor::{LightSensor, KoboLightSensor};
 use plato_core::battery::{Battery, KoboBattery};
 use plato_core::geom::{Rectangle, DiagDir, Region};
-use plato_core::view::works::Works;
+use plato_core::view::works::{Works, IndexType};
 use plato_core::view::reader::Reader;
 use plato_core::view::dialog::Dialog;
 use plato_core::view::home::Home;
@@ -231,10 +232,15 @@ pub fn run() -> Result<(), Error> {
     context.plugged = context.battery.status().is_ok_and(|v| v[0].is_wired());
 
     set_wifi(true, &mut context);
-    context.client.test_login();
-    // if !context.client.test_login() {
-    //     context.client.login("momijizukamori", "");
-    // }
+    if !context.client.test_login() {
+        if let (Some(username), Some(password)) = (
+                context.settings.ao3.username.clone(),
+                context.settings.ao3.password.clone(),
+            )
+        {
+            context.client.login(&username, &password);
+        }
+    }
     if context.settings.import.startup_trigger {
         context.batch_import();
     }
@@ -346,6 +352,7 @@ pub fn run() -> Result<(), Error> {
     tx.send(Event::WakeUp).ok();
 
     while let Ok(evt) = rx.recv() {
+        println!("got event {:?}", evt);
         match evt {
             Event::Device(de) => {
                 match de {
@@ -842,7 +849,7 @@ pub fn run() -> Result<(), Error> {
                             StatusCode::OK => {
                                 view.children_mut().retain(|child| !child.is::<Menu>());
                                 let mut next_view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), link_uri, &tx,
-                                                                     &mut rq, &mut context)?);
+                                                                     &mut rq, &mut context, IndexType::Works)?);
                                 transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
                                 history.push(HistoryItem {
                                     view,
@@ -853,11 +860,32 @@ pub fn run() -> Result<(), Error> {
                                 view = next_view;
                             },
                             StatusCode::FOUND |
-                            StatusCode::MOVED_PERMANENTLY => {
-                                // TODO: change this when we can look at tag pages
-                                let msg = format!("Unwrangled tag! No works available.");
-                                let notif = Notification::new(msg, &tx, &mut rq, &mut context);
-                                view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                                StatusCode::MOVED_PERMANENTLY => {
+                                    // Check if we're being redirected to a different works index
+                                    // because of tag synning
+                                    if let Some(loc) = r.headers().get(reqwest::header::LOCATION) {
+                                        if let Ok(loc) = loc.to_str() {
+                                            let loc_str = loc.to_string();
+                                            if loc_str.ends_with("/works") {
+                                                view.children_mut().retain(|child| !child.is::<Menu>());
+                                                let mut next_view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), loc_str, &tx,
+                                                                                     &mut rq, &mut context, plato_core::view::works::IndexType::Works)?);
+                                                transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
+                                                history.push(HistoryItem {
+                                                    view,
+                                                    rotation: context.display.rotation,
+                                                    monochrome: context.fb.monochrome(),
+                                                    dithered: context.fb.dithered(),
+                                                });
+                                                view = next_view;
+                                            }
+                                        }
+                                    } else {
+                                        // TODO: change this when we can look at tag pages
+                                        let msg = format!("Unwrangled tag! No works available.");
+                                        let notif = Notification::new(msg, &tx, &mut rq, &mut context);
+                                        view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                                    }
                             },
                             _ => {
                                 println!("Got {} for {}", r.status(), link_uri);
@@ -875,6 +903,53 @@ pub fn run() -> Result<(), Error> {
                     }
                 };
 
+            },
+            Event::LoadHistory(history_view) => {
+                if let Some(ref username) = context.settings.ao3.username {
+
+                    let mut link_uri = format!("https://archiveofourown.org/users/{}/readings", username);
+                    if let HistoryView::MarkedForLater = history_view {
+                         link_uri = link_uri + "?show=to-read";
+                    }
+
+                    let res = context.client.get(&link_uri).send();
+                    match res {
+                        Ok(r) => {
+                            match r.status() {
+                                StatusCode::OK => {
+                                    view.children_mut().retain(|child| !child.is::<Menu>());
+                                    let mut next_view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), link_uri, &tx,
+                                                                         &mut rq, &mut context, IndexType::History(history_view))?);
+                                    transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
+                                    history.push(HistoryItem {
+                                        view,
+                                        rotation: context.display.rotation,
+                                        monochrome: context.fb.monochrome(),
+                                        dithered: context.fb.dithered(),
+                                    });
+                                    view = next_view;
+                                },
+                                _ => {
+                                    println!("Got {} for {}", r.status(), link_uri);
+                                    let msg = format!("Error: {}", r.status());
+                                    let notif = Notification::new(msg, &tx, &mut rq, &mut context);
+                                    view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                                }
+                            }
+                        },
+                        Err(e) => {
+                            println!("Error fetching {} - {}", link_uri, e);
+                            let msg = format!("Error: {}", e);
+                            let notif = Notification::new(msg, &tx, &mut rq, &mut context);
+                            view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                        }
+                    };
+                } else {
+                    println!("Can't load history without a username!");
+                    let msg = format!("Can't load history without a username!");
+                    let notif = Notification::new(msg, &tx, &mut rq, &mut context);
+                    view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                }
             },
             Event::Select(EntryId::Launch(app_cmd)) => {
                 view.children_mut().retain(|child| !child.is::<Menu>());
@@ -950,7 +1025,6 @@ pub fn run() -> Result<(), Error> {
                 toggle_keyboard_layout_menu(view.as_mut(), rect, None, &mut rq, &mut context);
             },
             Event::ToggleAboutWork(info) => {
-                println!("Trying to open about work overlay");
                 let mut about_overlay = About::new(info, &mut context);
                 about_overlay.update_page();
                 rq.add(RenderData::new(about_overlay.id(), *about_overlay.rect(), UpdateMode::Gui));

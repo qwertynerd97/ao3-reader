@@ -16,6 +16,7 @@ use entities::ENTITIES;
 use walkdir::DirEntry;
 use anyhow::{Error, Context};
 use url::{Url, ParseError};
+use unicode_segmentation::UnicodeSegmentation;
 
 lazy_static! {
     pub static ref CHARACTER_ENTITIES: FxHashMap<&'static str, &'static str> = {
@@ -29,6 +30,23 @@ lazy_static! {
 
 pub fn ceil(x: usize, y: usize) -> usize {
     x / y  + (x%y != 0) as usize
+}
+
+pub fn unicode_split(text: &String, index: usize) -> (String, String) {
+    let mut glyphs = text.as_str().graphemes(true).collect::<Vec<&str>>();
+    let split_glyphs = glyphs.split_off(index);
+    let mut old = String::new();
+    let mut new = String::new();
+    for g in glyphs {
+        old.push_str(g);
+    }
+
+    for g in split_glyphs {
+        new.push_str(g);
+    }
+
+    return (old, new);
+
 }
 
 pub fn get_url(url: &str) -> Url {
