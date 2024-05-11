@@ -6,46 +6,46 @@ use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
-use plato_core::view::works::HistoryView;
+use ao3reader_core::view::works::HistoryView;
 use reqwest::blocking::Client;
 use reqwest::redirect::Policy;
 use reqwest::StatusCode;
 
-use plato_core::anyhow::{Error, Context as ResultExt, format_err};
-use plato_core::chrono::Local;
-use plato_core::framebuffer::{Framebuffer, KoboFramebuffer1, KoboFramebuffer2, UpdateMode};
-use plato_core::view::{View, Event, EntryId, EntryKind, ViewId, AppCmd, RenderData, RenderQueue, UpdateData};
-use plato_core::view::{handle_event, process_render_queue, wait_for_all};
-use plato_core::view::common::{locate, locate_by_id, transfer_notifications, overlapping_rectangle};
-use plato_core::view::common::{toggle_input_history_menu, toggle_keyboard_layout_menu};
-use plato_core::view::frontlight::FrontlightWindow;
-use plato_core::view::menu::{Menu, MenuKind};
-use plato_core::view::dictionary::Dictionary as DictionaryApp;
-use plato_core::view::touch_events::TouchEvents;
-use plato_core::view::rotation_values::RotationValues;
-use plato_core::document::sys_info_as_html;
-use plato_core::input::{DeviceEvent, PowerSource, ButtonCode, ButtonStatus, VAL_RELEASE, VAL_PRESS};
-use plato_core::input::{raw_events, device_events, usb_events, display_rotate_event, button_scheme_event};
-use plato_core::gesture::{GestureEvent, gesture_events};
-use plato_core::helpers::{load_toml, save_toml, get_url};
-use plato_core::settings::{ButtonScheme, Settings, SETTINGS_PATH, RotationLock, IntermKind};
-use plato_core::frontlight::{Frontlight, StandardFrontlight, NaturalFrontlight, PremixedFrontlight};
-use plato_core::lightsensor::{LightSensor, KoboLightSensor};
-use plato_core::battery::{Battery, KoboBattery};
-use plato_core::geom::{Rectangle, DiagDir, Region};
-use plato_core::view::works::{Works, IndexType};
-use plato_core::view::reader::Reader;
-use plato_core::view::dialog::Dialog;
-use plato_core::view::home::Home;
-use plato_core::view::overlay::about::About;
-use plato_core::view::intermission::Intermission;
-use plato_core::view::notification::Notification;
-use plato_core::device::{CURRENT_DEVICE, Orientation, FrontlightKind};
-use plato_core::library::Library;
-use plato_core::http::{HttpClient, update_session};
-use plato_core::font::Fonts;
-use plato_core::rtc::Rtc;
-use plato_core::context::Context;
+use ao3reader_core::anyhow::{Error, Context as ResultExt, format_err};
+use ao3reader_core::chrono::Local;
+use ao3reader_core::framebuffer::{Framebuffer, KoboFramebuffer1, KoboFramebuffer2, UpdateMode};
+use ao3reader_core::view::{View, Event, EntryId, EntryKind, ViewId, AppCmd, RenderData, RenderQueue, UpdateData};
+use ao3reader_core::view::{handle_event, process_render_queue, wait_for_all};
+use ao3reader_core::view::common::{locate, locate_by_id, transfer_notifications, overlapping_rectangle};
+use ao3reader_core::view::common::{toggle_input_history_menu, toggle_keyboard_layout_menu};
+use ao3reader_core::view::frontlight::FrontlightWindow;
+use ao3reader_core::view::menu::{Menu, MenuKind};
+use ao3reader_core::view::dictionary::Dictionary as DictionaryApp;
+use ao3reader_core::view::touch_events::TouchEvents;
+use ao3reader_core::view::rotation_values::RotationValues;
+use ao3reader_core::document::sys_info_as_html;
+use ao3reader_core::input::{DeviceEvent, PowerSource, ButtonCode, ButtonStatus, VAL_RELEASE, VAL_PRESS};
+use ao3reader_core::input::{raw_events, device_events, usb_events, display_rotate_event, button_scheme_event};
+use ao3reader_core::gesture::{GestureEvent, gesture_events};
+use ao3reader_core::helpers::{load_toml, save_toml, get_url};
+use ao3reader_core::settings::{ButtonScheme, Settings, SETTINGS_PATH, RotationLock, IntermKind};
+use ao3reader_core::frontlight::{Frontlight, StandardFrontlight, NaturalFrontlight, PremixedFrontlight};
+use ao3reader_core::lightsensor::{LightSensor, KoboLightSensor};
+use ao3reader_core::battery::{Battery, KoboBattery};
+use ao3reader_core::geom::{Rectangle, DiagDir, Region};
+use ao3reader_core::view::works::{Works, IndexType};
+use ao3reader_core::view::reader::Reader;
+use ao3reader_core::view::dialog::Dialog;
+use ao3reader_core::view::home::Home;
+use ao3reader_core::view::overlay::about::About;
+use ao3reader_core::view::intermission::Intermission;
+use ao3reader_core::view::notification::Notification;
+use ao3reader_core::device::{CURRENT_DEVICE, Orientation, FrontlightKind};
+use ao3reader_core::library::Library;
+use ao3reader_core::http::{HttpClient, update_session};
+use ao3reader_core::font::Fonts;
+use ao3reader_core::rtc::Rtc;
+use ao3reader_core::context::Context;
 
 pub const APP_NAME: &str = "Plato";
 const FB_DEVICE: &str = "/dev/fb0";
@@ -635,7 +635,7 @@ pub fn run() -> Result<(), Error> {
                 schedule_task(TaskId::Suspend, Event::Suspend,
                               SUSPEND_WAIT_DELAY, &tx, &mut tasks);
                 if context.settings.auto_power_off > 0.0 {
-                    let dur = plato_core::chrono::Duration::seconds((86_400.0 * context.settings.auto_power_off) as i64);
+                    let dur = ao3reader_core::chrono::Duration::seconds((86_400.0 * context.settings.auto_power_off) as i64);
                     if let Some(fired) = context.rtc.as_ref()
                                                 .and_then(|rtc| rtc.alarm()
                                                                    .map_err(|e| eprintln!("Can't get alarm: {:#}", e))
@@ -869,7 +869,7 @@ pub fn run() -> Result<(), Error> {
                                             if loc_str.ends_with("/works") {
                                                 view.children_mut().retain(|child| !child.is::<Menu>());
                                                 let mut next_view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), loc_str, &tx,
-                                                                                     &mut rq, &mut context, plato_core::view::works::IndexType::Works)?);
+                                                                                     &mut rq, &mut context, ao3reader_core::view::works::IndexType::Works)?);
                                                 transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
                                                 history.push(HistoryItem {
                                                     view,

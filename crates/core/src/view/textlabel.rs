@@ -19,8 +19,7 @@ pub struct TextLabel {
     font: Style,
     event: Event,
     hold_event: Option<Event>,
-    pub active: bool,
-    plan: Option<RenderPlan>
+    pub active: bool
 }
 
 impl TextLabel {
@@ -35,8 +34,7 @@ impl TextLabel {
             font,
             event,
             hold_event: None,
-            active: false,
-            plan: None
+            active: false
         }
     }
 

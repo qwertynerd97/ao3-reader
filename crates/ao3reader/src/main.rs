@@ -1,6 +1,6 @@
 mod app;
 
-use plato_core::anyhow::Error;
+use ao3reader_core::anyhow::Error;
 use crate::app::run;
 
 fn main() -> Result<(), Error> {

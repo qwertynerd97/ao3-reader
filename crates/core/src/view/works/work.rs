@@ -61,9 +61,14 @@ impl View for Work {
             Event::Gesture(GestureEvent::Tap(center)) if self.rect.includes(center) => {
                 self.active = true;
                 let id = &self.info.id;
-                rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
-                hub.send(Event::OpenWork(id.to_string())).ok();
-                self.active = false;
+                // FIXME: 0 id means we couldn't scrape one, either because of error or because
+                // it's a deleted work. We should handle this better.
+                if id != "0" {
+                    rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
+                    hub.send(Event::OpenWork(id.to_string())).ok();
+                    self.active = false;
+                }
+
                 true
             },
             Event::Gesture(GestureEvent::HoldFingerShort(center, ..)) if self.rect.includes(center) => {
