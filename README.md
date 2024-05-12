@@ -15,11 +15,12 @@ No, but you're welcome to fork this and do it yourself! The changes I've already
 * Original core code (including all of the HTML engine, event system, and rendering system) - [Plato](https://github.com/baskerville/plato)
 * Additional icons - [Material Design Icons](https://materialdesignicons.com/)
 * A number of friends who encouraged me to turn the idea kicking around my head for months into an actual app, and provided feedback on very early iterations.
+* [ao3downloader](https://github.com/nianeyna/ao3downloader), which helped point in the direction of fixing the problems I was having with login.
 
 ## Known Issues:
 * Notification position drifts (issue underlying in Plato)
-* Frontlight physical button takes screenshots rather than toggling frontlight (intentional for testing, will be reverted with the UI is more stable)
-* Will crash immediately on load if it can't reach Ao3 (either because of lack of wifi or because the site is down)
+* Deleted works look weird in the list
+* Kudos button not always working?
 * Works with anonymous authors will show as having no authors
 * Changing reader display settings doesn't alter current reader instances
 * About Work overlay currently missing stats items
@@ -33,13 +34,11 @@ No, but you're welcome to fork this and do it yourself! The changes I've already
 * Access to reading/leaving comments
 * Work blocklist
 * Worklist navigation history
-* Login (partially implemented, but getting the auth cycle right has proven tricky)
 * Option to set global default search parameters
 * Option to save works for offline reading
 * Show Ao3 symbols grid in various views
 * Rendering of remote images
 
 ## Questions:
-* Does this render properly on devices other than the Glo?
 * About Work overlay info and work items in indexes are currently kind of ugly - how could they be better?
 * At the moment works are loaded entirely, to dodge around having to figure out how to handle chapter navigation, but this results in long load times for large works, and no way of telling what chapter you're in - is this acceptable? How can we handle remote chapters?
