@@ -131,8 +131,8 @@ pub trait Document: Send+Sync {
         "".to_string()
     }
 
-    fn kudos_token(&self) -> String {
-        "".to_string()
+    fn kudos_token(&self) -> Option<String> {
+        None
     }
 
 

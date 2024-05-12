@@ -5,7 +5,7 @@ use fxhash::FxHashMap;
 use regex::Regex;
 use anyhow::Error;
 // use scraper::Node;
-use crate::http::{scrape, scrape_csrf};
+use crate::http::{scrape, scrape_kudos_csrf};
 use crate::ao3_metadata::Ao3Info;
 use crate::framebuffer::Pixmap;
 use crate::helpers::decode_entities;
@@ -419,8 +419,13 @@ impl Document for Ao3Document {
         self.parsed_doc.select(&blurb_select).next().unwrap().inner_html()
     }
 
-    fn kudos_token(&self) -> String {
-        scrape_csrf(&self.parsed_doc)
+    fn kudos_token(&self) -> Option<String> {
+        if let Some(value) =  scrape_kudos_csrf(&self.parsed_doc) {
+            Some(value.to_string())
+        } else {
+            None
+        }
+
     }
 
     fn work_id(&self) -> String {

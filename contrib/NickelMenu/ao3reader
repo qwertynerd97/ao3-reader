@@ -1,0 +1,1 @@
+menu_item  :main  :Ao3Reader      :cmd_spawn  :quiet:/mnt/onboard/.adds/ao3reader/ao3reader.sh

@@ -103,7 +103,8 @@ pub struct Reader {
     reflowable: bool,
     ephemeral: bool,
     finished: bool,
-    has_chapters: bool
+    has_chapters: bool,
+    kudos: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -370,6 +371,7 @@ impl Reader {
             let synthetic = doc.has_synthetic_page_numbers();
             let reflowable = doc.is_reflowable();
             let has_chapters = doc.has_chapters();
+            let kudos = doc.kudos_token();
 
             hub.send(Event::Update(UpdateMode::Partial)).ok();
 
@@ -401,7 +403,8 @@ impl Reader {
                 ephemeral: false,
                 reflowable,
                 finished: false,
-                has_chapters
+                has_chapters,
+                kudos,
             })
         })
     }
@@ -441,7 +444,6 @@ impl Reader {
                 loc = Location::Next(offset);
             }
         }
-
         hub.send(Event::Update(UpdateMode::Partial)).ok();
 
         Reader {
@@ -472,7 +474,8 @@ impl Reader {
             ephemeral: true,
             reflowable: true,
             finished: false,
-            has_chapters: false
+            has_chapters: false,
+            kudos: None
         }
     }
 
@@ -501,6 +504,7 @@ impl Reader {
         let pages_count = doc.pages_count();
         info.title = doc.title().unwrap_or_default();
         let has_chapters = doc.has_chapters();
+        let kudos = doc.kudos_token();
 
         let mut current_page = 0;
         if let Some(link_uri) = link_uri {
@@ -544,7 +548,8 @@ impl Reader {
             ephemeral: true,
             reflowable: true,
             finished: false,
-            has_chapters
+            has_chapters,
+            kudos
         }
     }
 
@@ -1446,6 +1451,10 @@ impl Reader {
             let tb_height = 1 * small_height;
 
             let sp_rect = *self.child(2).rect() - pt!(0, tb_height as i32);
+            let has_kudos = match &self.kudos {
+                Some(_token) => true,
+                None => false
+            };
 
             let tool_bar = ToolBar::new(rect![self.rect.min.x,
                                               sp_rect.max.y,
@@ -1454,7 +1463,8 @@ impl Reader {
                                         self.reflowable,
                                         self.info.reader.as_ref(),
                                         &context.settings.reader,
-                                        self.has_chapters);
+                                        self.has_chapters,
+                                    has_kudos);
             self.children.insert(2, Box::new(tool_bar) as Box<dyn View>);
 
             let separator = Filler::new(sp_rect, BLACK);
@@ -1655,6 +1665,11 @@ impl Reader {
                 self.children.insert(index, Box::new(separator) as Box<dyn View>);
                 index += 1;
 
+                let has_kudos = match &self.kudos {
+                    Some(_token) => true,
+                    None => false
+                };
+
                 let tool_bar = ToolBar::new(rect![self.rect.min.x,
                                                   self.rect.max.y - (small_height + tb_height) as i32 + big_thickness,
                                                   self.rect.max.x,
@@ -1662,7 +1677,8 @@ impl Reader {
                                             self.reflowable,
                                             self.info.reader.as_ref(),
                                             &context.settings.reader, 
-                                            self.has_chapters);
+                                            self.has_chapters,
+                                        has_kudos);
                 self.children.insert(index, Box::new(tool_bar) as Box<dyn View>);
                 index += 1;
             }
@@ -2794,51 +2810,53 @@ impl View for Reader {
             //     true
             // },
             Event::Kudos => {
-                let doc = self.doc.lock().unwrap();
-                let params = [("utf8", "✓"), 
-                            ("authenticity_token", &doc.kudos_token()), 
-                            ("kudo[commentable_id]", &doc.work_id()),
-                            ("kudo[commentable_type]", "Work")];
-                let client = reqwest::blocking::Client::new();
-                let res = context.client.post("https://archiveofourown.org/kudos.js")
-                    .form(&params)
-                    .send();
-
-                match res {
-                    Ok(r) => {
-                        match r.status() {
-                            StatusCode::CREATED => {hub.send(Event::Notify("Thank you for leaving kudos!".to_string())).ok();},
-                            StatusCode::UNPROCESSABLE_ENTITY => {
-                                let data = r.json::<KudosRes>();
-                                match data {
-                                    Ok(json) => {
-                                        for val in json.errors.values() {
-                                            match val {
-                                                Value::Array(items) => {
-                                                    for item in items {
-                                                    hub.send(Event::Notify(item.to_string())).ok();
-                                                    }
-                                                },
-                                                _ => {hub.send(Event::Notify(val.to_string())).ok();}
+                if let Some(token) = &self.kudos {
+                    let doc = self.doc.lock().unwrap();
+                    let params = [ 
+                                ("authenticity_token", token), 
+                                ("kudo[commentable_id]", &doc.work_id()),
+                                ("kudo[commentable_type]", &"Work".to_string())];
+                    let res = context.client.post("https://archiveofourown.org/kudos.js")
+                        .form(&params)
+                        .send();
+    
+                    match res {
+                        Ok(r) => {
+                            match r.status() {
+                                StatusCode::CREATED => {hub.send(Event::Notify("Thank you for leaving kudos!".to_string())).ok();},
+                                StatusCode::UNPROCESSABLE_ENTITY => {
+                                    let data = r.json::<KudosRes>();
+                                    match data {
+                                        Ok(json) => {
+                                            for val in json.errors.values() {
+                                                match val {
+                                                    Value::Array(items) => {
+                                                        for item in items {
+                                                        hub.send(Event::Notify(item.to_string())).ok();
+                                                        }
+                                                    },
+                                                    _ => {hub.send(Event::Notify(val.to_string())).ok();}
+                                                }
+                                                
                                             }
-                                            
+                                        },
+                                        Err(e) => {
+                                            println!("{}", e);
+                                            hub.send(Event::Notify("Sorry, we were unable to save your kudos".to_string())).ok();
                                         }
-                                    },
-                                    Err(e) => {
-                                        println!("{}", e);
-                                        hub.send(Event::Notify("Sorry, we were unable to save your kudos".to_string())).ok();
                                     }
-                                }
-                                
-                            },
-                            _ => {hub.send(Event::Notify("Sorry, we were unable to save your kudos".to_string())).ok();} 
-                        };
-                    },
-                    Err(e) => {
-                        println!("{}", e);
-                        hub.send(Event::Notify("Sorry, we were unable to save your kudos".to_string())).ok();
-                    }
-                };
+                                    
+                                },
+                                _ => {hub.send(Event::Notify("Sorry, we were unable to save your kudos".to_string())).ok();} 
+                            };
+                        },
+                        Err(e) => {
+                            println!("{}", e);
+                            hub.send(Event::Notify("Sorry, we were unable to save your kudos".to_string())).ok();
+                        }
+                    };
+                }
+
                 true
             },
             Event::Gesture(GestureEvent::Spread { axis: Axis::Horizontal, center, .. }) if self.rect.includes(center) => {

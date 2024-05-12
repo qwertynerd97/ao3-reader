@@ -1,30 +1,32 @@
-use scraper::Selector;
-use scraper::Html;
-use reqwest::{Url, Error};
-use reqwest::blocking::{Client, RequestBuilder, Response};
-use reqwest::cookie::Jar;
-use reqwest::cookie::CookieStore;
-use std::sync::Arc;
-use crate::settings::Settings;
 use crate::context::Context;
 use crate::helpers::decode_entities;
-use serde::{Serialize, Deserialize};
+use crate::settings::Settings;
+use reqwest::blocking::{Client, RequestBuilder, Response};
+use reqwest::cookie::CookieStore;
+use reqwest::cookie::Jar;
+use reqwest::{Error, Url};
+use scraper::Html;
+use scraper::Selector;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 const AO3: &str = "https://archiveofourown.org";
 const AO3_LOGIN: &str = "https://archiveofourown.org/users/login";
 const AO3_FAILED_LOGIN: &str = "The password or user name you entered doesn't match our records.";
+const AO3_SUCCESS_LOGIN: &str = "Successfully logged in.";
+const AO3_ALREADY_LOGIN: &str = "You are already signed in.";
 
-pub struct HttpClient{
+pub struct HttpClient {
     client: Client,
     pub logged_in: bool,
     cookie_set: bool,
-    cookies: Arc<Jar>
+    cookies: Arc<Jar>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Link{
+pub struct Link {
     pub title: String,
-    pub location: String
+    pub location: String,
 }
 
 pub fn list_to_str(list: &Vec<Link>, sep: &str) -> String {
@@ -39,8 +41,10 @@ pub fn update_session(context: &mut Context) {
     if context.settings.ao3.remember_me {
         let url = AO3.parse::<Url>().unwrap();
         match context.client.cookies.cookies(&url) {
-            Some(cookie_str) => context.settings.ao3.login_cookie = Some(cookie_str.to_str().unwrap().to_string()),
-            None => println!("No cookies available")
+            Some(cookie_str) => {
+                context.settings.ao3.login_cookie = Some(cookie_str.to_str().unwrap().to_string())
+            }
+            None => println!("No cookies available"),
         }
     }
 }
@@ -50,33 +54,37 @@ pub fn test_login(res: Result<Response, Error>, cookie_set: bool) -> bool {
     match res {
         Ok(r) => {
             let text = r.text();
-                match text {
-                    Ok(t) => {
-                        if t.contains(AO3_FAILED_LOGIN) {
-                            logged_in = false;
-                        } else {
-                            logged_in = true;
-                        }
-                    },
-                    Err(e) =>{ 
-                        format!("There was an error logging in: {}", e);
+            match text {
+                Ok(t) => {
+                    if t.contains(AO3_FAILED_LOGIN) {
                         logged_in = false;
-                    },
-                };
-        },
-        Err(e) => { println!("{}", e) }
+                    } else if t.contains(AO3_SUCCESS_LOGIN) || t.contains(AO3_ALREADY_LOGIN){
+                        logged_in = true;
+                    } else {
+                        logged_in = false;
+                    }
+                }
+                Err(e) => {
+                    format!("There was an error logging in: {}", e);
+                    logged_in = false;
+                }
+            };
+        }
+        Err(e) => {
+            println!("{}", e)
+        }
     };
     logged_in
 }
 
-pub fn scrape_inner_text(frag: &Html, select: &str) -> String{
+pub fn scrape_inner_text(frag: &Html, select: &str) -> String {
     let selector = Selector::parse(select).unwrap();
     match frag.select(&selector).next() {
         Some(el) => {
             let raw_text = el.text().collect::<Vec<_>>().join("");
             let trimmed = raw_text.trim();
             let text = decode_entities(trimmed).into_owned();
-            return text; 
+            return text;
         }
         None => {
             return "####".to_string();
@@ -84,10 +92,20 @@ pub fn scrape_inner_text(frag: &Html, select: &str) -> String{
     };
 }
 
-pub fn scrape_csrf(frag: &Html) -> String {
+pub fn scrape_login_csrf(frag: &Html) -> String {
     let token = Selector::parse(r#"form.new_user input[name="authenticity_token"]"#).unwrap();
     let input = frag.select(&token).next().unwrap();
     input.value().attr("value").unwrap().to_string()
+}
+
+pub fn scrape_kudos_csrf(frag: &Html) -> Option<&str> {
+    let token = Selector::parse(r#"form#new_kudo input[name="authenticity_token"]"#).unwrap();
+    let input = frag.select(&token).next();
+    if let Some(input) = input {
+        input.value().attr("value")
+    } else {
+        None
+    }    
 }
 
 pub fn scrape(frag: &Html, select: &str) -> String {
@@ -97,11 +115,11 @@ pub fn scrape(frag: &Html, select: &str) -> String {
             let raw = el.inner_html();
             let trimmed = raw.trim();
             let clean = decode_entities(trimmed).into_owned();
-            return clean
-        },
+            return clean;
+        }
         None => {
             println!("error trying to scrape {}", select);
-            return "#####".to_string()
+            return "#####".to_string();
         }
     };
 }
@@ -116,11 +134,10 @@ pub fn scrape_link_list(frag: &Html, select: &str) -> Vec<Link> {
         let trimmed = raw_title.trim();
         let title = decode_entities(trimmed).into_owned();
         let location = el.value().attr("href").unwrap_or("").to_string();
-        results.push(Link{title, location});
+        results.push(Link { title, location });
     }
 
     results
-
 }
 
 pub fn scrape_link(frag: &Html, select: &str) -> Link {
@@ -131,10 +148,13 @@ pub fn scrape_link(frag: &Html, select: &str) -> Link {
             let trimmed = raw_title.trim();
             let title = decode_entities(trimmed).into_owned();
             let location = el.value().attr("href").unwrap_or("").to_string();
-            return Link{title, location}; 
+            return Link { title, location };
         }
         None => {
-            return Link{title: "####".to_string(), location: "".to_string()};
+            return Link {
+                title: "####".to_string(),
+                location: "".to_string(),
+            };
         }
     };
 }
@@ -163,12 +183,11 @@ pub fn scrape_many_outer(frag: &Html, select: &str) -> Vec<String> {
     results
 }
 
-
 pub fn scrape_outer(frag: &Html, select: &str) -> String {
     let selector = Selector::parse(select).unwrap();
     match frag.select(&selector).next() {
         Some(el) => return el.inner_html(),
-        None => return "#####".to_string()
+        None => return "#####".to_string(),
     };
 }
 
@@ -190,7 +209,7 @@ impl HttpClient {
                     cookie_jar.add_cookie_str(&cookie, &url);
                     cookie_jar.add_cookie_str("user_credentials=1; path=/;", &url);
                     cookie_set = true;
-                },
+                }
                 _ => {}
             }
         }
@@ -199,20 +218,22 @@ impl HttpClient {
             .cookie_provider(cookies.clone())
             .build()
             .unwrap();
-    
+
         // Note: having a user cookie set doesn't guarantee we're actually logged in
-        // as the cookie may be invalid/expired. We'll test in a later step
+        // as the cookie may be invalid/expired.
+        let res = client.get(AO3).send();
+        let logged_in = test_login(res, cookie_set);
         HttpClient {
             client,
-            logged_in: false,
+            logged_in,
             cookie_set,
-            cookies
+            cookies,
         }
     }
 
     pub fn get_parse(&self, url: &str) -> Html {
         let res = self.client.get(url).send();
-        
+
         match res {
             Ok(r) => {
                 let text = r.text();
@@ -220,12 +241,10 @@ impl HttpClient {
                     Ok(t) => return Html::parse_document(&t),
                     Err(_e) => return Html::new_fragment(),
                 };
-            },
-            Err(_e) => {
-                return Html::new_fragment()
-                }
-            };
-        }
+            }
+            Err(_e) => return Html::new_fragment(),
+        };
+    }
 
     pub fn get(&self, url: &str) -> RequestBuilder {
         self.client.get(url)
@@ -238,9 +257,14 @@ impl HttpClient {
                 let text = r.text();
                 match text {
                     Ok(t) => return t,
-                    Err(e) => return format!("There was an error in the response body of {}:\n{}", url, e),
+                    Err(e) => {
+                        return format!(
+                            "There was an error in the response body of {}:\n{}",
+                            url, e
+                        )
+                    }
                 };
-            },
+            }
             Err(e) => {
                 println!("{}", e);
                 return format!("Error fetching {} - {}", url, e);
@@ -259,22 +283,20 @@ impl HttpClient {
         } else {
             return test_login(res, self.cookie_set);
         }
-        
     }
 
     pub fn login(&mut self, user: &str, password: &str) {
         let html = self.get_parse(AO3_LOGIN);
-        let token = scrape_csrf(&html);
-        let params=[("user[login]", user), 
-                    ("user[password]", password), 
-                    ("user[remember_me]", "1"),
-                    ("authenticity_token", &token) ];
+        let token = scrape_login_csrf(&html);
+        let params = [
+            ("user[login]", user),
+            ("user[password]", password),
+            ("user[remember_me]", "1"),
+            ("authenticity_token", &token),
+        ];
 
-        let res = self.client.post(AO3_LOGIN)
-            .form(&params)
-            .send();
+        let res = self.client.post(AO3_LOGIN).form(&params).send();
         let logged_in = test_login(res, self.cookie_set);
         self.logged_in = logged_in;
-
     }
 }

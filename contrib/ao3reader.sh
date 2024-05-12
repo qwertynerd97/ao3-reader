@@ -95,7 +95,7 @@ fi
 
 [ "$ORIG_BPP" ] && ./bin/utils/fbdepth -q -d 8
 
-LIBC_FATAL_STDERR_=1 ./plato >> info.log 2>&1
+LIBC_FATAL_STDERR_=1 ./ao3reader >> info.log 2>&1
 
 [ "$ORIG_BPP" ] && ./bin/utils/fbdepth -q -d "$ORIG_BPP"
 

@@ -352,7 +352,6 @@ pub fn run() -> Result<(), Error> {
     tx.send(Event::WakeUp).ok();
 
     while let Ok(evt) = rx.recv() {
-        println!("got event {:?}", evt);
         match evt {
             Event::Device(de) => {
                 match de {
