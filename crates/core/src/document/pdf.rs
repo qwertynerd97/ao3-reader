@@ -63,6 +63,7 @@ impl PdfOpener {
             let c_path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
             let doc = mp_open_document((self.0).0, c_path.as_ptr());
             if doc.is_null() {
+                println!("Empty documnt at {}", path.as_ref().as_os_str().to_str().unwrap());
                 None
             } else {
                 Some(PdfDocument {

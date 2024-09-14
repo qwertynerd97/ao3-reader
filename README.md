@@ -25,8 +25,12 @@ No, but you're welcome to fork this and do it yourself! The changes I've already
 ## Developing
 ### First Time Setup
 1. Install dev dependencies
-    * MacOS: ```brew install mupdf harfbuzz djvulibre sdl2```
-    * Fedora: ```sudo dnf install mupdf-devel harfbuzz djvulibre SDL2-devel freetype-devel jbig2dec-devel gumbo-parser-devel openjpeg2-devel  libjpeg-turbo-devel djvulibre-devel```
+    * MacOS (requires at least MacOS 13): ```brew install cmake mupdf harfbuzz djvulibre sdl2```
+    * Fedora (requires at least Fedora 39): ```sudo dnf install mupdf-devel harfbuzz djvulibre SDL2-devel freetype-devel jbig2dec-devel gumbo-parser-devel openjpeg2-devel  libjpeg-turbo-devel djvulibre-devel```
+        * On lower versions of Fedora, the default mupdf-devel is incompatible with this project, which requires mupdf 1.23, so additional steps are needed to build the proper mupdf version
+            1. Download the [mupdf 1.23.11 source code](https://mupdf.com/downloads/archive/mupdf-1.23.11-source.tar.gz) unzip it
+            2. Run ```sudo dnf install mesa-libGL-devel mesa-libGLU-devel xorg-x11-server-devel libXcursor-devel libXrandr-devel libXinerama-devel```
+            2. In the unzipped folder, run ```make HAVE_X11=no HAVE_GLUT=no prefix=/home/{user} install``, replacing {user} with your username
 2. Run the build script: ``` ./build.sh slow``` - this installs all the project libraries
 
 ### Development Commands
