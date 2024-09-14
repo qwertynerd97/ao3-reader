@@ -27,7 +27,6 @@ pub struct Work {
     rect: Rectangle,
     children: Vec<Box<dyn View>>,
     pub info: Ao3Info,
-    index: usize,
     active: bool,
     preview: bool,
     length: WorkView
@@ -40,14 +39,13 @@ pub enum WorkView {
 }
 
 impl Work {
-    pub fn new(rect: Rectangle, data: String, index: usize, preview: bool, length: WorkView) -> Work {
+    pub fn new(rect: Rectangle, data: String, _index: usize, preview: bool, length: WorkView) -> Work {
         let info = Ao3Info::new(data);
         Work {
             id: ID_FEEDER.next(),
             rect,
             children: vec![],
             info,
-            index,
             active: false,
             preview,
             length

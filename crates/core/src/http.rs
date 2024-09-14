@@ -65,7 +65,7 @@ pub fn test_login(res: Result<Response, Error>, cookie_set: bool) -> bool {
                     }
                 }
                 Err(e) => {
-                    format!("There was an error logging in: {}", e);
+                    println!("There was an error logging in: {}", e);
                     logged_in = false;
                 }
             };

@@ -75,7 +75,7 @@ pub fn toggle_main_menu(view: &mut dyn View, rect: Rectangle, enable: Option<boo
             return;
         }
 
-        let reader_info = Some(ReaderInfo {
+        let _reader_info = Some(ReaderInfo {
             .. Default::default()
         });
 

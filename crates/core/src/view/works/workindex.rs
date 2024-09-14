@@ -40,12 +40,10 @@ pub struct WorkIndex {
     thumbnail_previews: bool,
     pub current_page: usize,
     pub max_page: usize,
-    internal_page: usize,
     internal_max: usize,
     pub max_works: Option<usize>,
     pub url: Url,
     pub title: String,
-    index_type: IndexType,
 }
 
 #[derive(Clone)]
@@ -160,13 +158,11 @@ impl WorkIndex {
             thumbnail_previews,
             current_page: 0,
             max_page,
-            internal_page: 1,
             internal_max,
             url,
             max_works,
             pages,
-            title,
-            index_type,
+            title
         }
     }
 

@@ -42,12 +42,12 @@ use ao3reader_core::view::intermission::Intermission;
 use ao3reader_core::view::notification::Notification;
 use ao3reader_core::device::{CURRENT_DEVICE, Orientation, FrontlightKind};
 use ao3reader_core::library::Library;
-use ao3reader_core::http::{HttpClient, update_session};
+use ao3reader_core::http::update_session;
 use ao3reader_core::font::Fonts;
 use ao3reader_core::rtc::Rtc;
 use ao3reader_core::context::Context;
 
-pub const APP_NAME: &str = "Plato";
+pub const APP_NAME: &str = "AO3 Reader";
 const FB_DEVICE: &str = "/dev/fb0";
 const RTC_DEVICE: &str = "/dev/rtc0";
 const TOUCH_INPUTS: [&str; 5] = ["/dev/input/by-path/platform-2-0010-event",

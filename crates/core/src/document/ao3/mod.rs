@@ -11,7 +11,7 @@ use crate::framebuffer::Pixmap;
 use crate::helpers::decode_entities;
 use crate::document::{Document, Location, TextLocation, TocEntry, BoundedText, Chapter};
 use crate::unit::pt_to_px;
-use crate::geom::{Rectangle, Edge, CycleDir, Boundary};
+use crate::geom::{Edge, CycleDir, Boundary};
 use super::html::dom::{XmlTree, NodeRef};
 // use super::html::dom::Node;
 use super::html::engine::{Page, Engine};
@@ -40,12 +40,6 @@ pub struct Ao3Document {
     viewer_stylesheet: PathBuf,
     user_stylesheet: PathBuf,
     ignore_document_css: bool,
-}
-
-#[derive(Debug)]
-struct Chunk {
-    path: String,
-    size: usize,
 }
 
 unsafe impl Send for Ao3Document {}
@@ -154,12 +148,6 @@ impl Ao3Document {
     pub fn set_user_stylesheet<P: AsRef<Path>>(&mut self, path: P) {
         self.user_stylesheet = path.as_ref().to_path_buf();
         self.pages.clear();
-    }
-
-    #[inline]
-    fn rect(&self) -> Rectangle {
-        let (width, height) = self.engine.dims;
-        rect![0, 0, width as i32, height as i32]
     }
 
     #[inline]

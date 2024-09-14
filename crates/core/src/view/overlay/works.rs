@@ -22,7 +22,7 @@ pub struct WorksOverlay {
 impl WorksOverlay {
     pub fn new(context: &mut Context) -> WorksOverlay{
         let id = ID_FEEDER.next();
-        let mut overlay = Overlay::new(ViewId::Overlay, context);
+        let overlay = Overlay::new(ViewId::Overlay, context);
         let dpi = CURRENT_DEVICE.dpi;
         let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
         let big_height = scale_by_dpi(BIG_BAR_HEIGHT, dpi) as i32;
@@ -31,7 +31,7 @@ impl WorksOverlay {
         let mut children = Vec::new();
         children.push(Box::new(overlay.clone()) as Box<dyn View>);
 
-        let (width, height) = context.display.dims;
+        let (width, _height) = context.display.dims;
         let dy = small_height + padding;
 
         let msg_rect = rect![0,
@@ -45,7 +45,7 @@ let msg_rect2 = rect![0,
         dy + 3 * big_height + small_height];
 
 
-        let d = r###"
+        let _d = r###"
         <li id="work_25413577" class="work blurb group work-25413577 user-1959271" role="article">
                         <!--title, author, fandom-->
                         <div class="header module">
@@ -284,9 +284,9 @@ let msg_rect2 = rect![0,
                     </li>
                     "###;
 
-            let work = Work::new(msg_rect, d2.to_string(), 1, false, WorkView::Short);
-            let work2 = Work::new(msg_rect2, d3.to_string(), 2, false, WorkView::Long);
-            let msg_rect3 = rect![400,
+            let _work = Work::new(msg_rect, d2.to_string(), 1, false, WorkView::Short);
+            let _work2 = Work::new(msg_rect2, d3.to_string(), 2, false, WorkView::Long);
+            let _msg_rect3 = rect![400,
             dy + 3 * big_height + small_height,
             width as i32,
             dy + 3 * big_height + mini_height + small_height];

@@ -16,13 +16,11 @@ use crate::view::filler::Filler;
 use crate::view::keyboard::Keyboard;
 use crate::view::named_input::NamedInput;
 use crate::view::menu::Menu;
-use crate::view::notification::Notification;
 use super::top_bar::TopBar;
 use self::workindex::WorkIndex;
 use self::bottom_bar::BottomBar;
 use crate::gesture::GestureEvent;
 use crate::geom::{Rectangle, halves};
-use crate::input::DeviceEvent;
 use crate::device::CURRENT_DEVICE;
 use crate::unit::scale_by_dpi;
 use crate::color::BLACK;
@@ -54,8 +52,7 @@ pub struct Works {
     works_count: Option<usize>,
     works_lines: usize,
     shelf_index: usize,
-    focus: Option<ViewId>,
-    index_type: IndexType,
+    focus: Option<ViewId>
 }
 
 impl Works {
@@ -108,8 +105,7 @@ impl Works {
             shelf_index,
             focus: None,
             works_count,
-            works_lines,
-            index_type
+            works_lines
         })
     }
 
@@ -141,12 +137,12 @@ impl Works {
         self.update_shelf(false, hub, rq, context);
     }
 
-    fn update_shelf(&mut self, was_resized: bool, _hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+    fn update_shelf(&mut self, _was_resized: bool, _hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
         let dpi = CURRENT_DEVICE.dpi;
         let big_height = scale_by_dpi(BIG_BAR_HEIGHT, dpi) as i32;
         let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
         let workindex = self.children[self.shelf_index].as_mut().downcast_mut::<WorkIndex>().unwrap();
-        let max_lines = ((workindex.rect.height() as i32 + thickness) / big_height) as usize;
+        let _max_lines = ((workindex.rect.height() as i32 + thickness) / big_height) as usize;
 
         // if was_resized {
         //     let page_position = if self.visible_books.is_empty() {
@@ -173,13 +169,13 @@ impl Works {
         workindex.get_works(context, rq);
     }
 
-    fn update_top_bar(&mut self, search_visible: bool, rq: &mut RenderQueue) {
-        if let Some(index) = locate::<TopBar>(self) {
-            let top_bar = self.children[index].as_mut().downcast_mut::<TopBar>().unwrap();
-            let name = if search_visible { "back" } else { "search" };
-            top_bar.update_root_icon(name, rq);
-        }
-    }
+    // fn update_top_bar(&mut self, search_visible: bool, rq: &mut RenderQueue) {
+    //     if let Some(index) = locate::<TopBar>(self) {
+    //         let top_bar = self.children[index].as_mut().downcast_mut::<TopBar>().unwrap();
+    //         let name = if search_visible { "back" } else { "search" };
+    //         top_bar.update_root_icon(name, rq);
+    //     }
+    // }
 
     fn update_bottom_bar(&mut self, rq: &mut RenderQueue) {
         if let Some(index) = rlocate::<BottomBar>(self) {
@@ -465,12 +461,11 @@ impl View for Works {
         self.children[1].resize(separator_rect, hub, rq, context);
 
         let shelf_min_y = rect.min.y + small_height + big_thickness;
-        let mut index = 2;
 
         // Bottom bar.
         
         let bottom_bar_index = rlocate::<BottomBar>(self).unwrap();
-        index = bottom_bar_index;
+        let mut index = bottom_bar_index;
 
         let separator_rect = rect![rect.min.x, rect.max.y - small_height - small_thickness,
                                    rect.max.x, rect.max.y - small_height + big_thickness];
@@ -495,7 +490,6 @@ impl View for Works {
                 self.children[index-1].resize(rect![rect.min.x, s_max_y - thickness,
                                                     rect.max.x, s_max_y],
                                               hub, rq, context);
-                index -= 2;
             }
         }
 

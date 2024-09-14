@@ -10,6 +10,30 @@ Network and HTML processing packages, mostly. If Ao3 ever releases an API, we'll
 **Will you make a version for [other site]?**  
 No, but you're welcome to fork this and do it yourself! The changes I've already made in the code should make it a lot easier to port for another site, as various views and handlers exist already.
 
+## Compiling from Soure Code
+### First Time Setup
+(Based on the [build instructions for Plato](https://github.com/baskerville/plato/blob/master/doc/BUILD.md))
+1. Install the [Kobo Developer Toolchain](https://drive.google.com/drive/folders/1YT6x2X070-cg_E8iWvNUUrWg5-t_YcV0)
+    1. Download the toolchain from Google Drive
+    2. Unzip the folder into the parent directory of your bin.  (```echo $PATH``` in a terminal, and finding a directory in the that looks similar to /home/{username}/bin. As an example, if your PATH contains /home/qwertynerd97/bin/, you would unzip the file into /home/qwertynerd97)
+2. Install rustup: ```curl https://sh.rustup.rs -sSf | sh```
+3. Install the rustup ARM target: ```rustup target add arm-unknown-linux-gnueabihf```
+
+### Release Build
+1. Run the build script: ```./build.sh slow```
+
+## Developing
+### First Time Setup
+1. Install dev dependencies
+    * MacOS: ```brew install mupdf harfbuzz djvulibre sdl2```
+    * Fedora: ```sudo dnf install mupdf-devel harfbuzz djvulibre SDL2-devel freetype-devel jbig2dec-devel gumbo-parser-devel openjpeg2-devel  libjpeg-turbo-devel djvulibre-devel```
+2. Run the build script: ``` ./build.sh slow``` - this installs all the project libraries
+
+### Development Commands
+* Run unit tests (with coverage checker): ```cargo llvm-cov```
+* Run unit tests with HTML coverage report (viewable in browser): ```cargo llvm-cov --open```
+* Run cucumber integration tests (requires internet access): ```TBD``
+* Build dev version: ```cargo build```
 
 ## Credits
 * Original core code (including all of the HTML engine, event system, and rendering system) - [Plato](https://github.com/baskerville/plato)
