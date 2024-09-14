@@ -9,6 +9,7 @@ fi
 [ -d bundle ] && rm -Rf bundle
 
 NICKEL_MENU_ARCHIVE=$1
+AO3R_VERSION=$(cargo pkgid -p ao3reader | cut -d '#' -f 2)
 
 mkdir bundle
 cd bundle || exit 1
@@ -24,7 +25,9 @@ rm KoboRoot.tgz
 mv mnt/onboard/.adds .
 rm -Rf mnt
 
-mv ../dist .adds/plato
+mv ../dist .adds/ao3reader
+zip -r ao3reader-"$AO3R_VERSION".zip .adds
+
 cp ../contrib/NickelMenu/* .adds/nm
 
 mkdir .kobo
@@ -33,7 +36,7 @@ rm -Rf usr
 
 FIRMWARE_VERSION=$(basename "$FIRMWARE_ARCHIVE" .zip)
 FIRMWARE_VERSION=${FIRMWARE_VERSION##*-}
-PLATO_VERSION=$(cargo pkgid -p plato | cut -d '#' -f 2)
 
-zip -r plato-bundle-"$PLATO_VERSION".zip .adds .kobo
+
+zip -r ao3reader-bundle-"$AO3R_VERSION".zip .adds .kobo
 rm -Rf .adds .kobo

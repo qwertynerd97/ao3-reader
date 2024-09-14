@@ -13,7 +13,7 @@ use crate::context::Context;
 use super::work::{ Work, WorkView };
 use super::{ HistoryView, IndexType };
 use crate::view::filler::Filler;
-use crate::http::{ scrape_many, scrape, scrape_many_outer };
+use crate::html::{ scrape_many, scrape, scrape_many_outer };
 use crate::ao3_metadata::str_to_usize;
 use regex::Regex;
 use crate::helpers::{ ceil, get_url, update_url };
