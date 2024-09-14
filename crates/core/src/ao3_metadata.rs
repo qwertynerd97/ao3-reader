@@ -1,6 +1,6 @@
 use regex::Regex;
 use scraper::Html;
-use crate::http::{scrape_outer, scrape, scrape_link_list, scrape_inner_text, Link};
+use crate::html::{scrape, scrape_inner_text, scrape_inner_text_to_html, scrape_link_list, scrape_outer, Link};
 use chrono::NaiveDate;
 use serde::{Serialize, Deserialize};
 use crate::helpers::date_format;
@@ -116,7 +116,7 @@ impl Ao3Info {
         let fandoms = scrape_link_list(&html, ".fandoms a");
         let req_tags = RequiredTags::new(scrape_outer(&html, "ul.required-tags"));
         let tags = scrape_link_list(&html, "ul.tags a");
-        let summary = scrape_inner_text(&html, "blockquote.summary");
+        let summary = scrape_inner_text_to_html(&html, "blockquote.summary");
         let words = str_to_usize(scrape(&html, "dd.words"));
         let comments = str_to_usize(scrape(&html, "dd.comments"));
         let kudos = str_to_usize(scrape(&html, "dd.kudos"));
@@ -186,6 +186,11 @@ impl Ao3Info {
             updated,
             chapters
         }
+    }
+
+
+    pub fn download_name(&self) -> String {
+        format!("{}.epub", self.title)
     }
 }
 
@@ -289,4 +294,5 @@ impl RequiredTags {
 
         vec![warning_icon, rating_icon, category_icon, complete_icon]
     }
+
 }

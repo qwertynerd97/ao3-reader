@@ -5,7 +5,7 @@ use fxhash::FxHashMap;
 use regex::Regex;
 use anyhow::Error;
 // use scraper::Node;
-use crate::http::{scrape, scrape_kudos_csrf};
+use crate::html::{scrape, scrape_kudos_csrf};
 use crate::ao3_metadata::Ao3Info;
 use crate::framebuffer::Pixmap;
 use crate::helpers::decode_entities;

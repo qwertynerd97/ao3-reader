@@ -8,7 +8,7 @@ use crate::ao3_metadata::Ao3Info;
 use crate::font::{Fonts, font_from_style};
 use crate::geom::{Rectangle, halves};
 use crate::context::Context;
-use crate::http::list_to_str;
+use crate::html::list_to_str;
 use serde::{Serialize, Deserialize};
 
 const SIZE_BASE: f32 = 1000.0;
