@@ -10,6 +10,25 @@ Network and HTML processing packages, mostly. If Ao3 ever releases an API, we'll
 **Will you make a version for [other site]?**  
 No, but you're welcome to fork this and do it yourself! The changes I've already made in the code should make it a lot easier to port for another site, as various views and handlers exist already.
 
+## Using Ao3 Reader
+### "One Click" Setup
+1. Connect your Kobo device to the computer
+2. Download the [one click install file for AO3Reader](https://seam.rip/ao3reader/OCP-ao3reader-0.1.0.zip)
+3. Unzip into the root of the Kobo (KOBOeReader drive)
+4. Add the following lines to the .kobo/Kobo/Kobo eReader.conf file
+```
+[FeatureSettings]
+ExcludeSyncFolders=(\\.(?!kobo|adobe).+|([^.][^/]*/)+\\..+)
+```
+5. Update the Setting file to add your Ao3 Login and your favorite tags
+    * Rename the .adds/ao3reader/Settings-sample.toml file to Settings.toml
+    * [Optional] Setup login - this allows you to access your Marked For Later, and any archive-locked fics
+        * Set the ```username``` value to your Ao3 username
+        * Set the ```password``` value to your Ao3 password
+    * [Optional] Setup favorite tags
+        * On the line that looks like ```faves=[]```, add any favorite tags in the form ```["Tag Name", "Tag URL"]```, with individual tags seperated by commas
+    * Note: Although both login and tags are optional because the reader will still technically work, the current beta does not provide a way to look up an arbitrary tag. If you do neither, you will just get a blank screen with no way to read any works
+6. Eject your Kobo - It should immediately enter an install cycle that looks like it is updating
 
 ## Credits
 * Original core code (including all of the HTML engine, event system, and rendering system) - [Plato](https://github.com/baskerville/plato)
