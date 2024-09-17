@@ -20,3 +20,4 @@
 /thirdparty/*/*
 !/thirdparty/*/*kobo*
 *.kate-swp
+*.DS_Store
