@@ -62,12 +62,14 @@ TOKEN=""
 if [[ $WIFI = true ]]
 then
   echo "Loading AO3 Token..."
-  TOKEN=$(wget -qO - "https://archiveofourown.org/token_dispenser.json" | $JQ -r '.token')
+  TOKEN=$(curl -s -c cookies.txt "https://archiveofourown.org/token_dispenser.json" | $JQ -r '.token')
+  echo "${TOKEN}"
 fi
 
 # Determine if there is already offline data avalible for this book
 EXPORT="${EXPORT_FOLDER}/${ID}.json"
-URL=""
+SITE=""
+WORK_ID=""
 if [[ -e "${EXPORT}" ]]
 then
   echo "File ${EXPORT} already exists, loading data"
@@ -76,6 +78,7 @@ else
   echo "Creating json data..."
   URL=$(unzip -p "${BOOKS}/${ID}" | grep -o -m 1 'https://archiveofourown.org/works/[0-9]*' | head -1)
   JSON=$(echo "${JSON}" | $JQ --arg value "${URL}" '. + {url: $value}')
+  NO_PROTOCOL="${URL#*//}"
   JSON=$(echo "${JSON}" | $JQ '. + {actions: []}')
 fi
 
