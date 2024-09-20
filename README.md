@@ -30,6 +30,31 @@ ExcludeSyncFolders=(\\.(?!kobo|adobe).+|([^.][^/]*/)+\\..+)
     * Note: Although both login and tags are optional because the reader will still technically work, the current beta does not provide a way to look up an arbitrary tag. If you do neither, you will just get a blank screen with no way to read any works
 6. Eject your Kobo - It should immediately enter an install cycle that looks like it is updating
 
+## Developing with Docker
+### Requirements
+* Bash
+* Coreutils
+    * realpath
+    * dirname
+    * basename
+* Findutils
+    * xargs
+* Docker
+* X11 or Wayland
+
+### First Time Setup
+* Run `./containers/development.sh build-docker-image` to build the development Docker image (this may take a few minutes)
+* Run `./containers/development.sh run-docker-image` to run the development Docker image
+* In the container, run `./containers/development.sh build-dependencies` to build AO3 Reader's third party dependencies (this may take a while)
+* In the container, run `./containers/development.sh run-emulator` to run AO3 Reader's emulator (this may take a while on the first time)
+
+### Subsequent Times
+* Run `./containers/development.sh run-docker-image` to run the development Docker image
+* In the container, run `./containers/development.sh run-emulator` to run AO3 Reader's emulator (this may take a while on the first time)
+
+### Development
+Edit AO3 Reader's source code with your favorite code editor or IDE. Then, _in the container_, run `./containers/development.sh run-emulator` to run and test your changes. Your code changes are immediately available in the container, there is no need to copy files to and fro.
+
 ## Credits
 * Original core code (including all of the HTML engine, event system, and rendering system) - [Plato](https://github.com/baskerville/plato)
 * Additional icons - [Material Design Icons](https://materialdesignicons.com/)
