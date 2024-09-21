@@ -1,7 +1,7 @@
 #! /bin/sh
 
-#version=$(cargo pkgid -p plato | cut -d '#' -f 2)
-archive="plato-0.9.38.zip"
+version="0.9.43"
+archive="plato-${version}.zip"
 if ! [ -e "$archive" ] ; then
 	info_url="https://api.github.com/repos/baskerville/plato/releases/tags/${version}"
 	echo "Downloading ${archive}."

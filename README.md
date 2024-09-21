@@ -1,5 +1,29 @@
 This project aims to create a eink-friendly view of Archive of Our Own for Kobo devices, allowing reading and interacting with works without having to save them to local memory first. It also aims to provide functionality that Ao3 has declined to implement on their end, such as the ability to set default search parameters, and the ability to easily access saved searches.
 
+## Development Guide (WIP)
+This has only been tested on recent versions of Ubuntu Linux, and will probably need testing for other distros and OSes
+
+- Install rustup: `curl https://sh.rustup.rs -sSf | sh`
+### Building for Kobos
+- Install the correct architecture target for cross-compiling `rustup target add arm-unknown-linux-gnueabihf`
+- Install the Kobo toolchain. This is necessary because the Kobo firmware uses older versions of libc than are usually shipped in repositories.
+    - Kobo has their build files [available on Github](https://github.com/kobolabs/Kobo-Reader/), but the toolchains require either complex magic with the GitHub API, or cloning the entire (extremely large) repo, because they're in LFS storage.
+    - Instead, you can download the toolchain files [from Linaro](https://releases.linaro.org/components/toolchain/binaries/4.9-2017.01/arm-linux-gnueabihf/) - `gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz` is the correct toolchain for building on modern amd64 Linux systems
+    - extract the contents of the tar, and add it to the start of your system path.
+        ```
+        tar -xf gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf.tar.xz
+        mv gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf kobo-build
+        export PATH="$(pwd)/kobo-build/bin:$PATH"
+        ```
+- Run `./build.sh` to build a binary suitable for Kobos
+    - By default, this pulls pre-built copies of necessary libraries from the upstream Plato project
+    - If these do not work, you can recompile local copies by running `./build.sh slow`. 
+
+### Running the emulator
+- You will need system installs of all the libraries that the reader uses - MuPDF 1.23.11, DjVuLibre, FreeType, HarfBuzz, libpng, libjpeg, and Gumbo - along with SDL2, which only the emulator uses, along with their development headers.
+    - **Note**: The version of MuPDF in many Linux package managers is not up-to-date, and you may need to compile from source. MuPDF has [instructions for building the library on their site](https://mupdf.readthedocs.io/en/latest/quick-start-guide.html#building-the-library)
+- Run `./run-emulator.sh` to run the emulator, or if you use Visual Studio Code, you can can launch it with or without a debugger attached via the Run menu.
+
 ## Pre-emptive FAQ
 **Why isn't this being made as an addon to Plato?**  
 The structure of Ao3 works don't map particularly well to documents in Plato, which makes shoehorning them in tough, plus this code requires a lot of additional network functionality. But eventually there'll be a passthrough to Ao3's epub download functionality which will let you save and open stuff in Plato later.
