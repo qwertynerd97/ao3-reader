@@ -29,9 +29,6 @@ use ao3reader_core::input::{raw_events, device_events, usb_events, display_rotat
 use ao3reader_core::gesture::{GestureEvent, gesture_events};
 use ao3reader_core::helpers::{load_toml, save_toml, get_url};
 use ao3reader_core::settings::{ButtonScheme, Settings, SETTINGS_PATH, RotationLock, IntermKind};
-use ao3reader_core::frontlight::{Frontlight, StandardFrontlight, NaturalFrontlight, PremixedFrontlight};
-use ao3reader_core::lightsensor::{LightSensor, KoboLightSensor};
-use ao3reader_core::battery::{Battery, KoboBattery};
 use ao3reader_core::geom::{Rectangle, DiagDir, Region};
 use ao3reader_core::view::works::{Works, IndexType};
 use ao3reader_core::view::reader::Reader;
@@ -40,15 +37,12 @@ use ao3reader_core::view::home::Home;
 use ao3reader_core::view::overlay::about::About;
 use ao3reader_core::view::intermission::Intermission;
 use ao3reader_core::view::notification::Notification;
-use ao3reader_core::device::{CURRENT_DEVICE, Orientation, FrontlightKind};
+use ao3reader_core::device::{CURRENT_DEVICE, Orientation};
 use ao3reader_core::http::update_session;
-use ao3reader_core::font::Fonts;
-use ao3reader_core::rtc::Rtc;
 use ao3reader_core::context::Context;
 
 pub const APP_NAME: &str = "AO3 Reader";
 const FB_DEVICE: &str = "/dev/fb0";
-const RTC_DEVICE: &str = "/dev/rtc0";
 const TOUCH_INPUTS: [&str; 5] = ["/dev/input/by-path/platform-2-0010-event",
                                  "/dev/input/by-path/platform-1-0038-event",
                                  "/dev/input/by-path/platform-1-0010-event",

@@ -87,6 +87,7 @@ impl HttpClient {
 
         // Note: having a user cookie set doesn't guarantee we're actually logged in
         // as the cookie may be invalid/expired.
+        // TODO - Do this in the background, instead of on startup where it
         let res = client.get(AO3).send();
         let logged_in = test_login(res, cookie_set);
         HttpClient {
@@ -147,7 +148,7 @@ impl HttpClient {
             if link.title == "EPUB" {
                 let mut file = File::create(work.download_name()).unwrap();
                 let mut res = self.get(&link.location).send().unwrap();
-                res.copy_to(&mut file);
+                let _result = res.copy_to(&mut file);
             }
         }
     }
@@ -178,5 +179,38 @@ impl HttpClient {
         let res = self.client.post(AO3_LOGIN).form(&params).send();
         let logged_in = test_login(res, self.cookie_set);
         self.logged_in = logged_in;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use reqwest::Url;
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn WHEN_httpClientIsCreated_THEN_itWillStoreCookies() {
+        // WHEN HttpClient is created
+        let mut settings: Settings = Default::default();
+        let client = HttpClient::new(&mut settings);
+        // THEN it will store cookies
+        let url = AO3.parse::<Url>().unwrap();
+        // Note: when adding custom cookies, they must include a path
+        client.cookies.add_cookie_str("fakeTestCookie=unittest; path=/;", &url);
+        assert!(client.cookies.cookies(&url).unwrap().to_str().expect("test cookie").to_string().contains("fakeTestCookie=unittest"));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_settingsSetToRememberLogin_WHEN_httpClientIsCreated_THEN_itWillHaveAo3Cookies() {
+        // GIVEN Settings set to remember login
+        let mut settings: Settings = Default::default();
+        settings.ao3.remember_me = true;
+        settings.ao3.login_cookie = Some("fakeTestCookie=unittest".to_string());
+        // WHEN HttpClient is created
+        let client = HttpClient::new(&mut settings);
+        // THEN it will have Ao3 cookies
+        let url = AO3.parse::<Url>().unwrap();
+        assert!(client.cookies.cookies(&url).unwrap().to_str().expect("test cookie").to_string().contains("fakeTestCookie=unittest"));
     }
 }

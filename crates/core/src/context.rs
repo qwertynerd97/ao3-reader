@@ -8,7 +8,6 @@ use walkdir::WalkDir;
 use rand_core::SeedableRng;
 use rand_xoshiro::Xoroshiro128Plus;
 
-use crate::anyhow::{Context as ResultExt};
 use crate::battery::{Battery, KoboBattery, FakeBattery};
 use crate::device::{CURRENT_DEVICE, FrontlightKind};
 use crate::dictionary::{Dictionary, load_dictionary_from_file};
@@ -112,12 +111,28 @@ impl Context {
         let rotation = CURRENT_DEVICE.transformed_rotation(fb.rotation());
         let rng = Xoroshiro128Plus::seed_from_u64(Local::now().timestamp_subsec_nanos() as u64);
         let client = HttpClient::new(&mut settings);
-        Context { fb, rtc, display: Display { dims, rotation },
-                  library, settings, fonts, dictionaries: BTreeMap::new(),
-                  keyboard_layouts: BTreeMap::new(), input_history: FxHashMap::default(),
-                  battery, frontlight, lightsensor, notification_index: 0,
-                  kb_rect: Rectangle::default(), rng, plugged: false, covered: false,
-                  shared: false, online: false, client: client }
+        Context {
+            fb,
+            rtc,
+            display: Display { dims, rotation },
+            library,
+            settings,
+            fonts,
+            dictionaries: BTreeMap::new(),
+            keyboard_layouts: BTreeMap::new(),
+            input_history: FxHashMap::default(),
+            battery,
+            frontlight,
+            lightsensor,
+            notification_index: 0,
+            kb_rect: Rectangle::default(),
+            rng,
+            plugged: false,
+            covered: false,
+            shared: false,
+            online: false,
+            client: client
+        }
     }
 
     pub fn batch_import(&mut self) {
