@@ -10,30 +10,55 @@ Network and HTML processing packages, mostly. If Ao3 ever releases an API, we'll
 **Will you make a version for [other site]?**  
 No, but you're welcome to fork this and do it yourself! The changes I've already made in the code should make it a lot easier to port for another site, as various views and handlers exist already.
 
-## Compiling from Soure Code
+## Using Ao3 Reader
+### "One Click" Setup
+1. Connect your Kobo device to the computer
+2. Download the [one click install file for AO3Reader](https://seam.rip/ao3reader/OCP-ao3reader-0.1.0.zip)
+3. Unzip into the root of the Kobo (KOBOeReader drive)
+4. Add the following lines to the .kobo/Kobo/Kobo eReader.conf file
+```
+[FeatureSettings]
+ExcludeSyncFolders=(\\.(?!kobo|adobe).+|([^.][^/]*/)+\\..+)
+```
+5. Update the Setting file to add your Ao3 Login and your favorite tags
+    * Rename the .adds/ao3reader/Settings-sample.toml file to Settings.toml
+    * [Optional] Setup login - this allows you to access your Marked For Later, and any archive-locked fics
+        * Set the ```username``` value to your Ao3 username
+        * Set the ```password``` value to your Ao3 password
+    * [Optional] Setup favorite tags
+        * On the line that looks like ```faves=[]```, add any favorite tags in the form ```["Tag Name", "Tag URL"]```, with individual tags seperated by commas
+    * Note: Although both login and tags are optional because the reader will still technically work, the current beta does not provide a way to look up an arbitrary tag. If you do neither, you will just get a blank screen with no way to read any works
+6. Eject your Kobo - It should immediately enter an install cycle that looks like it is updating
+
+## Developing with Docker
+### Requirements
+* Bash
+* Coreutils
+    * realpath
+    * dirname
+    * basename
+* Findutils
+    * xargs
+* Docker
+* X11 or Wayland
+
 ### First Time Setup
-(Based on the [build instructions for Plato](https://github.com/baskerville/plato/blob/master/doc/BUILD.md))
-1. Install the [Kobo Developer Toolchain](https://drive.google.com/drive/folders/1YT6x2X070-cg_E8iWvNUUrWg5-t_YcV0)
-    1. Download the toolchain from Google Drive
-    2. Unzip the folder into the parent directory of your bin.  (```echo $PATH``` in a terminal, and finding a directory in the that looks similar to /home/{username}/bin. As an example, if your PATH contains /home/qwertynerd97/bin/, you would unzip the file into /home/qwertynerd97)
-2. Install rustup: ```curl https://sh.rustup.rs -sSf | sh```
-3. Install the rustup ARM target: ```rustup target add arm-unknown-linux-gnueabihf```
+* Run `./containers/development.sh build-docker-image` to build the development Docker image (this may take a few minutes)
+* Run `./containers/development.sh run-docker-image` to run the development Docker image.  This will change your terminal to be inside the Docker container.
+* In the container, run `./containers/development.sh build-dependencies` to build AO3 Reader's third party dependencies (this may take a while)
+* In the container, run `./containers/development.sh run-emulator` to run AO3 Reader's emulator (this may take a while on the first time)
 
-### Release Build
-1. Run the build script: ```./build.sh slow```
+### Subsequent Times
+* Run `./containers/development.sh run-docker-image` to run the development Docker image. This will change your terminal to be inside the Docker container.
+* In the container, run `./containers/development.sh run-emulator` to run AO3 Reader's emulator (this may take a while on the first time)
 
-## Developing
-### First Time Setup
-1. Install dev dependencies
-    * MacOS (requires at least MacOS 13): ```brew install cmake mupdf harfbuzz djvulibre sdl2```
-    * Fedora (requires at least Fedora 39): ```sudo dnf install mupdf-devel harfbuzz djvulibre SDL2-devel freetype-devel jbig2dec-devel gumbo-parser-devel openjpeg2-devel  libjpeg-turbo-devel djvulibre-devel```
-        * On lower versions of Fedora, the default mupdf-devel is incompatible with this project, which requires mupdf 1.23, so additional steps are needed to build the proper mupdf version
-            1. Download the [mupdf 1.23.11 source code](https://mupdf.com/downloads/archive/mupdf-1.23.11-source.tar.gz) unzip it
-            2. Run ```sudo dnf install mesa-libGL-devel mesa-libGLU-devel xorg-x11-server-devel libXcursor-devel libXrandr-devel libXinerama-devel```
-            2. In the unzipped folder, run ```make HAVE_X11=no HAVE_GLUT=no prefix=/home/{user} install``, replacing {user} with your username
-2. Run the build script: ``` ./build.sh slow``` - this installs all the project libraries
+### Development
+Edit AO3 Reader's source code with your favorite code editor or IDE. Then, _in the container_, run `./containers/development.sh run-emulator` to run and test your changes. Your code changes are immediately available in the container, there is no need to copy files to and fro.
 
-### Development Commands
+### Testing One-time Set up (must be run in docker container)
+* Install llvm coverage: ```cargo install cargo-llvm-cov```
+
+### Testing Commands
 * Run unit tests (with coverage checker): ```cargo llvm-cov```
 * Run unit tests with HTML coverage report (viewable in browser): ```cargo llvm-cov --open```
 * Run cucumber integration tests (requires internet access): ```TBD``

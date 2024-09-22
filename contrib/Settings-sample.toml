@@ -221,15 +221,7 @@ username = "reader"
 # Your AO3 password
 password = "password"
 # A list of faves to show on startup. These consist of a display name, and a link to a tag index or search results
-faves = [
-["Gu Yun | Gu Zixi", "https://archiveofourown.org/tags/Gu%20Yun/works?"],
- ["Weilan", "https://archiveofourown.org/works?utf8=%E2%9C%93&work_search%5Bsort_column%5D=revised_at&work_search%5Bother_tag_names%5D=&work_search%5Bexcluded_tag_names%5D=HIStory3%3A+%E9%82%A3%E4%B8%80%E5%A4%A9+%7C+HIStory3%3A+Make+Our+Days+Count&work_search%5Bcrossover%5D=&work_search%5Bcomplete%5D=&work_search%5Bwords_from%5D=&work_search%5Bwords_to%5D=&work_search%5Bdate_from%5D=&work_search%5Bdate_to%5D=&work_search%5Bquery%5D=&work_search%5Blanguage_id%5D=en&commit=Sort+and+Filter&tag_id=Shen+Wei*s*Zhao+Yunlan"],
- ["Shen Wei/Zhao Yunlan", "https://archiveofourown.org/works?work_search%5Blanguage_id%5D=en&work_search%5Bwords_to%5D=&work_search%5Bother_tag_names%5D=&work_search%5Bcrossover%5D=&commit=Sort+and+Filter&work_search%5Bwords_from%5D=&work_search%5Bsort_column%5D=revised_at&work_search%5Bdate_from%5D=&tag_id=Shen+Wei*s*Zhao+Yunlan&work_search%5Bcomplete%5D=&utf8=%E2%9C%93&work_search%5Bexcluded_tag_names%5D=HIStory3%3A+%E9%82%A3%E4%B8%80%E5%A4%A9+%7C+HIStory3%3A+Make+Our+Days+Count&work_search%5Bdate_to%5D=&work_search%5Bquery%5D="], 
- ["minecraft 1", "https://archiveofourown.org/tags/Wilbur%20Soot%20*a*%20Technoblade%20*a*%20TommyInnit%20*a*%20Phil%20Watson/works"], 
- ["minecraft 2", "https://archiveofourown.org/tags/They%20Both%20Die%20at%20the%20End%20-%20Adam%20Silvera/works"], 
- ["They Both Die at the End - Adam Silvera", "https://archiveofourown.org/tags/They%20Both%20Die%20at%20the%20End%20-%20Adam%20Silvera/works?"], 
- ["杀破狼 | Sha Po Lang - priest", "https://archiveofourown.org/tags/%E6%9D%80%E7%A0%B4%E7%8B%BC%20%7C%20Sha%20Po%20Lang%20-%20priest/works?"]
- ]
+faves = []
  # Whether to display more info per work (but fewer works per page), or less info (but more works per page)
 work-display = "Short"
 # Whether the physical frontlight button, if you have one, toggles the frontlight or takes a screenshot

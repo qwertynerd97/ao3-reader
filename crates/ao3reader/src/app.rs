@@ -11,7 +11,7 @@ use reqwest::blocking::Client;
 use reqwest::redirect::Policy;
 use reqwest::StatusCode;
 
-use ao3reader_core::anyhow::{Error, Context as ResultExt, format_err};
+use ao3reader_core::anyhow::{Error, Context as ResultExt};
 use ao3reader_core::chrono::Local;
 use ao3reader_core::framebuffer::{Framebuffer, KoboFramebuffer1, KoboFramebuffer2, UpdateMode};
 use ao3reader_core::view::{View, Event, EntryId, EntryKind, ViewId, AppCmd, RenderData, RenderQueue, UpdateData};
@@ -41,7 +41,6 @@ use ao3reader_core::view::overlay::about::About;
 use ao3reader_core::view::intermission::Intermission;
 use ao3reader_core::view::notification::Notification;
 use ao3reader_core::device::{CURRENT_DEVICE, Orientation, FrontlightKind};
-use ao3reader_core::library::Library;
 use ao3reader_core::http::update_session;
 use ao3reader_core::font::Fonts;
 use ao3reader_core::rtc::Rtc;
@@ -88,52 +87,6 @@ struct HistoryItem {
     rotation: i8,
     monochrome: bool,
     dithered: bool,
-}
-
-fn build_context(fb: Box<dyn Framebuffer>) -> Result<Context, Error> {
-    let rtc = Rtc::new(RTC_DEVICE)
-                  .map_err(|e| eprintln!("Can't open RTC device: {:#}.", e))
-                  .ok();
-    let path = Path::new(SETTINGS_PATH);
-    let mut settings = if path.exists() {
-        load_toml::<Settings, _>(path).context("can't load settings")?
-    } else {
-        Default::default()
-    };
-
-    if settings.libraries.is_empty() {
-        return Err(format_err!("no libraries found"));
-    }
-
-    if settings.selected_library >= settings.libraries.len() {
-        settings.selected_library = 0;
-    }
-
-    let library_settings = &settings.libraries[settings.selected_library];
-    let library = Library::new(&library_settings.path, library_settings.mode)?;
-
-    let fonts = Fonts::load().context("can't load fonts")?;
-
-    let battery = Box::new(KoboBattery::new().context("can't create battery")?) as Box<dyn Battery>;
-
-    let lightsensor = if CURRENT_DEVICE.has_lightsensor() {
-        Box::new(KoboLightSensor::new().context("can't create light sensor")?) as Box<dyn LightSensor>
-    } else {
-        Box::new(0u16) as Box<dyn LightSensor>
-    };
-
-    let levels = settings.frontlight_levels;
-    let frontlight = match CURRENT_DEVICE.frontlight_kind() {
-        FrontlightKind::Standard => Box::new(StandardFrontlight::new(levels.intensity)
-                                        .context("can't create standard frontlight")?) as Box<dyn Frontlight>,
-        FrontlightKind::Natural => Box::new(NaturalFrontlight::new(levels.intensity, levels.warmth)
-                                        .context("can't create natural frontlight")?) as Box<dyn Frontlight>,
-        FrontlightKind::Premixed => Box::new(PremixedFrontlight::new(levels.intensity, levels.warmth)
-                                        .context("can't create premixed frontlight")?) as Box<dyn Frontlight>,
-    };
-
-    Ok(Context::new(fb, rtc, library, settings,
-                    fonts, battery, frontlight, lightsensor))
 }
 
 fn schedule_task(id: TaskId, event: Event, delay: Duration, hub: &Sender<Event>, tasks: &mut Vec<Task>) {
@@ -227,7 +180,7 @@ pub fn run() -> Result<(), Error> {
         fb.set_rotation(startup_rotation).ok();
     }
 
-    let mut context = build_context(fb).context("can't build context")?;
+    let mut context = Context::new_from_kobo(fb);
 
     context.plugged = context.battery.status().is_ok_and(|v| v[0].is_wired());
 

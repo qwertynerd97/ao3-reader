@@ -4,6 +4,7 @@ mod ao3_settings;
 use std::env;
 use std::ops::Index;
 use std::fmt::{self, Debug};
+use std::path::Path;
 use std::path::PathBuf;
 use std::collections::{BTreeMap, HashMap};
 use fxhash::FxHashSet;
@@ -12,8 +13,10 @@ use crate::metadata::{SortMethod, TextAlign};
 use crate::frontlight::LightLevels;
 use crate::color::BLACK;
 use crate::device::CURRENT_DEVICE;
+use crate::library::Library;
 use crate::unit::mm_to_px;
 use self::ao3_settings::Ao3Settings;
+use crate::helpers::{load_toml};
 
 pub use self::preset::{LightPreset, guess_frontlight};
 
@@ -128,6 +131,37 @@ pub struct Settings {
     pub battery: BatterySettings,
     pub frontlight_levels: LightLevels,
     pub ao3: Ao3Settings
+}
+
+impl Settings {
+    pub fn load_settings() -> Settings {
+        let path = Path::new(SETTINGS_PATH);
+        let settings = if path.exists() {
+            load_toml::<Settings, _>(path)
+                .map_err(|e| eprintln!("Can't open Settings.toml: {:#}.", e))
+                .unwrap()
+        } else {
+            Default::default()
+        };
+        settings
+    }
+
+    pub fn get_current_library(&self) -> Library {
+        let selected_valid = self.selected_library < self.libraries.len();
+        let selected = if selected_valid { self.selected_library } else { 0 };
+
+        if self.libraries.is_empty() {
+            let default_lib: LibrarySettings = Default::default();
+            return Library::new(&default_lib.path, default_lib.mode)
+                .map_err(|e| eprintln!("Can't open Library: {:#}.", e))
+                .unwrap();
+        }
+
+        let library_settings = &self.libraries[selected];
+        Library::new(&library_settings.path, library_settings.mode)
+            .map_err(|e| eprintln!("Can't open Library: {:#}.", e))
+            .unwrap()
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -556,5 +590,109 @@ impl Default for Settings {
             frontlight_presets: Vec::new(),
             ao3: Ao3Settings::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use reqwest::Url;
+    use crate::helpers::{save_toml};
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_aSettingFileExists_WHEN_loadSettingsIsCalled_THEN_theSettingsAreLoadedFromTheFile() {
+        // GIVEN a Settings file Exists
+        let mut file_settings: Settings = Default::default();
+        file_settings.ao3.faves.push(
+            ("fake fave search".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL")));
+        file_settings.ao3.username = Some("testUser".to_string());
+        file_settings.ao3.password = Some("superFakePass123".to_string());
+        let path = Path::new(SETTINGS_PATH);
+        let _result = save_toml(&file_settings, path);
+
+        // WHEN load_settings is called
+        let settings = Settings::load_settings();
+
+        // THEN the settings are loaded from the file
+        // Checking the AO3 faves, username, and password, since that is what is currently set
+        // by users in order to get anything to display on the home screen
+        assert_eq!(settings.ao3.faves, file_settings.ao3.faves);
+        assert_eq!(settings.ao3.username, Some("testUser".to_string()));
+        assert_eq!(settings.ao3.password, Some("superFakePass123".to_string()));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_noSettingFileExists_WHEN_loadSettingsIsCalled_THEN_theDefaultSettingsAreLoaded() {
+        // GIVEN no Settings file Exists
+        let path = Path::new(SETTINGS_PATH);
+        let _result = fs::remove_file(path);
+
+        // WHEN load_settings is called
+        let settings = Settings::load_settings();
+
+        // THEN the default settings are loaded
+        let default_settings: Settings = Default::default();
+        // Checking the AO3 faves, username, and password, since that is what is currently set
+        // by users in order to get anything to display on the home screen
+        assert_eq!(settings.ao3.faves, default_settings.ao3.faves);
+        assert_eq!(settings.ao3.username, default_settings.ao3.username);
+        assert_eq!(settings.ao3.password, default_settings.ao3.password);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn WHEN_getCurrentLibraryIsCalled_THEN_theAppropriateLibraryIsCreated() {
+        // GIVEN a Settings object with 4 libraries
+        let mut default_settings: Settings = Default::default();
+        default_settings.libraries.push({ LibrarySettings {
+            name: "TEST_LIBRARY".to_string(),
+            path: PathBuf::from("artworks"),
+            .. Default::default()
+        }});
+        // AND the fifth library is selected
+        default_settings.selected_library = 4;
+        // WHEN get_current_library is called
+        let library = default_settings.get_current_library();
+        // THEN the appropriate library is created
+        assert_eq!(library.home, PathBuf::from("artworks"));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_anInvalidSelectedLibrary_WHEN_getCurrentLibraryIsCalled_THEN_theFirstLibraryIsCreated() {
+        // GIVEN an invalid selected library
+        let mut default_settings: Settings = Default::default();
+        default_settings.libraries = Vec::new();
+        default_settings.libraries.push({ LibrarySettings {
+            name: "TEST_LIBRARY".to_string(),
+            path: PathBuf::from("artworks"),
+            .. Default::default()
+        }});
+        default_settings.libraries.push({ LibrarySettings {
+            name: "TEST_LIBRARY_2".to_string(),
+            path: PathBuf::from("icons"),
+            .. Default::default()
+        }});
+        default_settings.selected_library = 5;
+        // WHEN get_current_library is called
+        let library = default_settings.get_current_library();
+        // THEN the first library is created
+        assert_eq!(library.home, PathBuf::from("artworks"));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_noLibrariesExist_WHEN_getCurrentLibraryIsCalled_THEN_theDefaultLibraryIsCreated() {
+        // GIVEN an invalid selected library
+        let mut default_settings: Settings = Default::default();
+        default_settings.libraries = Vec::new();
+        default_settings.selected_library = 0;
+        // WHEN get_current_library is called
+        let library = default_settings.get_current_library();
+        // THEN the first library is created
+        assert_eq!(library.home, PathBuf::from("/opt/ao3-reader/crates/core"));
     }
 }

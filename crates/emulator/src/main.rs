@@ -53,25 +53,10 @@ use reqwest::blocking::Client;
 use reqwest::redirect::Policy;
 use reqwest::StatusCode;
 
-pub const APP_NAME: &str = "Plato";
+pub const APP_NAME: &str = "AO3 Reader";
 const DEFAULT_ROTATION: i8 = 1;
 
 const CLOCK_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
-
-
-pub fn build_context(fb: Box<dyn Framebuffer>) -> Result<Context, Error> {
-    let settings = load_toml::<Settings, _>(SETTINGS_PATH)?;
-    let library_settings = &settings.libraries[settings.selected_library];
-    let library = Library::new(&library_settings.path, library_settings.mode)?;
-
-    let battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
-    let frontlight = Box::new(LightLevels::default()) as Box<dyn Frontlight>;
-    let lightsensor = Box::new(0u16) as Box<dyn LightSensor>;
-    let fonts = Fonts::load()?;
-
-    Ok(Context::new(fb, None, library, settings,
-                    fonts, battery, frontlight, lightsensor))
-}
 
 #[inline]
 fn seconds(timestamp: u32) -> f64 {
@@ -229,7 +214,7 @@ fn main() -> Result<(), Error> {
     let video_subsystem = sdl_context.video().unwrap();
     let (width, height) = CURRENT_DEVICE.dims;
     let window = video_subsystem
-                 .window("Plato Emulator", width, height)
+                 .window("AO3 Reader Emulator", width, height)
                  .position_centered()
                  .build()
                  .unwrap();
@@ -237,7 +222,7 @@ fn main() -> Result<(), Error> {
     let mut fb = window.into_canvas().software().build().unwrap();
     fb.set_blend_mode(BlendMode::Blend);
 
-    let mut context = build_context(Box::new(FBCanvas(fb)))?;
+    let mut context = Context::new_from_virtual(Box::new(FBCanvas(fb)));
 
     if !context.client.test_login() {
         if let (Some(username), Some(password)) = (
@@ -291,7 +276,7 @@ fn main() -> Result<(), Error> {
         context.frontlight.set_intensity(0.0);
     }
 
-    println!("{} is running on a Kobo {}.", APP_NAME,
+    println!("{} is running virtually {}.", APP_NAME,
                                             CURRENT_DEVICE.model);
     println!("The framebuffer resolution is {} by {}.", context.fb.rect().width(),
                                                         context.fb.rect().height());
