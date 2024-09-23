@@ -178,16 +178,14 @@ pub fn run() -> Result<(), Error> {
 
     context.plugged = context.battery.status().is_ok_and(|v| v[0].is_wired());
 
+    // TODO - investigate
+    // This looks like it only force-enables wifi the first time it ever starts
+    // the reader, because it mutates the settings, which from then on does not
+    // change or activate the enable wifi script
+    // this also blocks the ui thread while waiting for wifi to be enabled :(
     set_wifi(true, &mut context);
-    if !context.client.test_login() {
-        if let (Some(username), Some(password)) = (
-                context.settings.ao3.username.clone(),
-                context.settings.ao3.password.clone(),
-            )
-        {
-            context.client.login(&username, &password);
-        }
-    }
+    context.client.renew_login();
+
     if context.settings.import.startup_trigger {
         context.batch_import();
     }

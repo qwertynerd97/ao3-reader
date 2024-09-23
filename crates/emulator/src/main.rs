@@ -219,15 +219,7 @@ fn main() -> Result<(), Error> {
 
     let mut context = Context::new_from_virtual(Box::new(FBCanvas(fb)));
 
-    if !context.client.test_login() {
-        if let (Some(username), Some(password)) = (
-                context.settings.ao3.username.clone(),
-                context.settings.ao3.password.clone(),
-            )
-        {
-            context.client.login(&username, &password);
-        }
-    }
+    context.client.renew_login();
 
     if context.settings.import.startup_trigger {
         context.batch_import();

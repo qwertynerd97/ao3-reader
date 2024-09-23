@@ -57,6 +57,7 @@ Edit AO3 Reader's source code with your favorite code editor or IDE. Then, _in t
 
 ### Testing One-time Set up (must be run in docker container)
 * Install llvm coverage: ```cargo install cargo-llvm-cov```
+* Go to crates/core/TestSettings.toml and add your AO3 username and password
 
 ### Testing Commands
 * Run unit tests (with coverage checker): ```cargo llvm-cov```
