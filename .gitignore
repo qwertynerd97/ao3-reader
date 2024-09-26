@@ -20,3 +20,4 @@
 /thirdparty/*/*
 !/thirdparty/*/*kobo*
 *.kate-swp
+*TestSettings.toml

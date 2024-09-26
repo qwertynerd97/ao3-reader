@@ -218,7 +218,6 @@ fn main() -> Result<(), Error> {
     fb.set_blend_mode(BlendMode::Blend);
 
     let mut context = Context::new_from_virtual(Box::new(FBCanvas(fb)));
-
     context.client.renew_login();
 
     if context.settings.import.startup_trigger {
@@ -228,6 +227,7 @@ fn main() -> Result<(), Error> {
     context.load_dictionaries();
     context.load_keyboard_layouts();
 
+    // Add input sources into a single FIFO queue
     let (tx, rx) = mpsc::channel();
     let (ty, ry) = mpsc::channel();
     let touch_screen = gesture_events(ry);
@@ -268,10 +268,10 @@ fn main() -> Result<(), Error> {
     println!("The framebuffer resolution is {} by {}.", context.fb.rect().width(),
                                                         context.fb.rect().height());
 
-
-
     let mut bus = VecDeque::with_capacity(4);
 
+    // Handle the inputs
+    // TODO - why are these different between the Kobo app and the emulator
     'outer: loop {
         let mut event_pump = sdl_context.event_pump().unwrap();
         while let Some(sdl_evt) = event_pump.poll_event() {

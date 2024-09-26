@@ -176,6 +176,7 @@ pub fn run() -> Result<(), Error> {
 
     let mut context = Context::new_from_kobo(fb);
 
+    // TODO - why is this not replicated in emulator?
     context.plugged = context.battery.status().is_ok_and(|v| v[0].is_wired());
 
     // TODO - investigate
@@ -184,14 +185,22 @@ pub fn run() -> Result<(), Error> {
     // change or activate the enable wifi script
     // this also blocks the ui thread while waiting for wifi to be enabled :(
     set_wifi(true, &mut context);
+    // TODO - can this be async instead of on startup?
+    // Similarly, can we open the AO3 Reader intantly with a loading
+    // page that indicates setup status, instead of freezing the Kobo screen?
+    // Ideally AO3 Reader UI would be much snappier
     context.client.renew_login();
 
+    // TODO - these do not seem to be used in AO3 Reader since it does not
+    // actually import libraries.  Leaving for now, but skipping testing
     if context.settings.import.startup_trigger {
         context.batch_import();
     }
     context.load_dictionaries();
     context.load_keyboard_layouts();
 
+    // Kobo inputs that are not mimocked in the emuator
+    // Skipping teting for now
     let mut paths = Vec::new();
     for ti in &TOUCH_INPUTS {
         if Path::new(ti).exists() {
@@ -212,6 +221,7 @@ pub fn run() -> Result<(), Error> {
         }
     }
 
+    // Add input sources into a single FIFO queue
     let (raw_sender, raw_receiver) = raw_events(paths);
     let touch_screen = gesture_events(device_events(raw_receiver, context.display, context.settings.button_scheme));
     let usb_port = usb_events();

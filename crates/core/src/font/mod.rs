@@ -556,28 +556,32 @@ pub struct Fonts {
 
 impl Fonts {
     pub fn load() -> Result<Fonts, Error> {
+        Fonts::load_with_prefix("")
+    }
+
+    pub fn load_with_prefix(prefix: &str) -> Result<Fonts, Error> {
         let opener = FontOpener::new()?;
         let mut fonts = Fonts {
             sans_serif: FontFamily {
-                regular: opener.open("fonts/NotoSans-Regular.ttf")?,
-                italic: opener.open("fonts/NotoSans-Italic.ttf")?,
-                bold: opener.open("fonts/NotoSans-Bold.ttf")?,
-                bold_italic: opener.open("fonts/NotoSans-BoldItalic.ttf")?,
+                regular: opener.open(format!("{prefix}fonts/NotoSans-Regular.ttf"))?,
+                italic: opener.open(format!("{prefix}fonts/NotoSans-Italic.ttf"))?,
+                bold: opener.open(format!("{prefix}fonts/NotoSans-Bold.ttf"))?,
+                bold_italic: opener.open(format!("{prefix}fonts/NotoSans-BoldItalic.ttf"))?,
             },
             serif: FontFamily {
-                regular: opener.open("fonts/NotoSerif-Regular.ttf")?,
-                italic: opener.open("fonts/NotoSerif-Italic.ttf")?,
-                bold: opener.open("fonts/NotoSerif-Bold.ttf")?,
-                bold_italic: opener.open("fonts/NotoSerif-BoldItalic.ttf")?,
+                regular: opener.open(format!("{prefix}fonts/NotoSerif-Regular.ttf"))?,
+                italic: opener.open(format!("{prefix}fonts/NotoSerif-Italic.ttf"))?,
+                bold: opener.open(format!("{prefix}fonts/NotoSerif-Bold.ttf"))?,
+                bold_italic: opener.open(format!("{prefix}fonts/NotoSerif-BoldItalic.ttf"))?,
             },
             monospace: FontFamily {
-                regular: opener.open("fonts/SourceCodeVariable-Roman.otf")?,
-                italic: opener.open("fonts/SourceCodeVariable-Italic.otf")?,
-                bold: opener.open("fonts/SourceCodeVariable-Roman.otf")?,
-                bold_italic: opener.open("fonts/SourceCodeVariable-Italic.otf")?,
+                regular: opener.open(format!("{prefix}fonts/SourceCodeVariable-Roman.otf"))?,
+                italic: opener.open(format!("{prefix}fonts/SourceCodeVariable-Italic.otf"))?,
+                bold: opener.open(format!("{prefix}fonts/SourceCodeVariable-Roman.otf"))?,
+                bold_italic: opener.open(format!("{prefix}fonts/SourceCodeVariable-Italic.otf"))?,
             },
-            keyboard: opener.open("fonts/VarelaRound-Regular.ttf")?,
-            display: opener.open("fonts/Cormorant-Regular.ttf")?,
+            keyboard: opener.open(format!("{prefix}fonts/VarelaRound-Regular.ttf"))?,
+            display: opener.open(format!("{prefix}fonts/Cormorant-Regular.ttf"))?,
         };
         fonts.monospace.bold.set_variations(&["wght=600"]);
         fonts.monospace.bold_italic.set_variations(&["wght=600"]);

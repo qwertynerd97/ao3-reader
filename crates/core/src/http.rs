@@ -272,6 +272,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn WHEN_loginIsCalledWithValidLogin_THEN_clientWillBeLoggedIn() {
+        // NOTE: this test is flaky due to having to hit AO3 servers
         // GIVEN remember_me is not set
         let mut settings: Settings = Default::default();
         let mut client = HttpClient::new(&mut settings);
@@ -317,6 +318,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn GIVEN_recentLogin_WHEN_areLoginCookiesStaleIsCalled_THEN_cookiesWillNotBeStale() {
+        // NOTE: this test is flaky due to having to hit AO3 servers
         // GIVEN recent login
         let mut settings: Settings = Default::default();
         settings.ao3.remember_me = true;
@@ -357,6 +359,7 @@ mod tests {
     #[test]
     #[allow(non_snake_case)]
     fn GIVEN_validUsernameAndPassword_WHEN_renewLoginIsCalled_THEN_clientWillBeLoggedIn() {
+        // NOTE: this test is flaky due to having to hit AO3 servers
         // GIVEN no username
         let mut settings: Settings = Default::default();
         let test_settings: TestSettings = TestSettings::load();

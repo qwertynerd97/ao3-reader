@@ -29,26 +29,31 @@ pub fn row_calc(rect: Rectangle) -> usize {
 }
 
 impl Home {
-    pub fn new(rect: Rectangle, rq: &mut RenderQueue, context: &mut Context) -> Home {
+    pub fn new_empty(rect: Rectangle) -> Home {
         let id = ID_FEEDER.next();
-        let mut children = Vec::new();
+        let children = Vec::new();
+
+        Home {
+            rect,
+            children,
+            id,
+            view_id: ViewId::Home,
+        }
+    }
+
+    pub fn new(rect: Rectangle, rq: &mut RenderQueue, context: &mut Context) -> Home {
+        let mut home = Home::new_empty(rect);
         let dpi = CURRENT_DEVICE.dpi;
 
-        let bg = Filler::new(rect, WHITE);
-        children.push(Box::new(bg) as Box<dyn View>);
+        home.create_background();
 
         let padding = scale_by_dpi(SMALL_PADDING, dpi) as i32;
         let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
         let (_small_thickness, big_thickness) = halves(thickness);
         let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
 
-        let top_bar = TopBar::new(rect![rect.min.x, rect.min.y,
-                                        rect.max.x, rect.min.y + small_height + big_thickness],
-                                  Event::Toggle(ViewId::SearchBar),
-                                  "Favorite Tags".to_string(),
-                                  context);
-        children.push(Box::new(top_bar) as Box<dyn View>);
-
+        // TODO - let top bar determine it's own thickness
+        home.create_top_bar(context, small_height + big_thickness);
 
         let entries_rect =  rect![rect.min.x, rect.min.y + small_height + big_thickness,
         rect.max.x, rect.max.y];
@@ -65,7 +70,7 @@ impl Home {
             let sep_rect = rect![x_min, start_y,
             x_max, start_y + thickness];
             let sep = Filler::new(sep_rect, BLACK);
-            children.push(Box::new(sep) as Box<dyn View>);
+            home.children.push(Box::new(sep) as Box<dyn View>);
             let label_rect = rect![x_min, start_y + thickness,
             x_max, start_y + row_height];
             let loc = faves[n].1.clone();
@@ -73,15 +78,15 @@ impl Home {
             let chapter = TextLabel::new(label_rect,
                                 (*faves[n].0).to_string(),
                                 Align::Left(padding), LABEL_STYLE, Event::LoadIndex(loc.to_string()));
-                                children.push(Box::new(chapter) as Box<dyn View>);
+                                home.children.push(Box::new(chapter) as Box<dyn View>);
             start_y += row_height;
         }
 
         let sep_rect = rect![x_min, start_y,
         x_max, start_y + thickness];
         let sep = Filler::new(sep_rect, BLACK);
-        children.push(Box::new(sep) as Box<dyn View>);
-        
+        home.children.push(Box::new(sep) as Box<dyn View>);
+
         // Link to 'Marked for Later' view
         if context.client.logged_in {
             let label_rect = rect![x_min, start_y + thickness,
@@ -89,18 +94,27 @@ impl Home {
             let history = TextLabel::new(label_rect,
                 "Marked For Later".to_string(),
                 Align::Left(padding), BOLD_STYLE, Event::LoadHistory(super::works::HistoryView::MarkedForLater));
-                children.push(Box::new(history) as Box<dyn View>);
+                home.children.push(Box::new(history) as Box<dyn View>);
 
         }
 
-        rq.add(RenderData::new(id, rect, UpdateMode::Full));
-    
-        Home {
-            rect,
-            children,
-            id,
-            view_id: ViewId::Home,
-        }
+        rq.add(RenderData::new(home.id, rect, UpdateMode::Full));
+
+        home
+    }
+
+    fn create_background(&mut self) {
+        let bg = Filler::new(self.rect, WHITE);
+        self.children.push(Box::new(bg) as Box<dyn View>);
+    }
+
+    fn create_top_bar(&mut self, context: &mut Context, bar_height: i32) {
+        let top_bar = TopBar::new(rect![self.rect.min.x, self.rect.min.y,
+                                        self.rect.max.x, self.rect.min.y + bar_height],
+                                  Event::Toggle(ViewId::SearchBar),
+                                  "Favorite Tags".to_string(),
+                                  context);
+        self.children.push(Box::new(top_bar) as Box<dyn View>);
     }
 
     fn reseed(&mut self, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
@@ -175,4 +189,34 @@ impl View for Home {
     fn view_id(&self) -> Option<ViewId> {
         Some(self.view_id)
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn WHEN_createBackgroundIsCalled_THEN_aFullSizeWhiteRectangleIsAddedToChildren() {
+        // WHEN create_background is called
+        let mut home = Home::new_empty(rect![0, 0, 600, 800]);
+        home.create_background();
+        // THEN a full size white rectangle is added to children
+        assert_eq!(home.children.len(), 1);
+        assert_eq!(home.children[0].rect(), &rect![0, 0, 600, 800]);
+        let _test_type = home.child_mut(0).downcast_mut::<Filler>().unwrap();
+    }
+
+    // TODO - make it so the top bar is not dependant on the frame buffer in context
+    // #[test]
+    // #[allow(non_snake_case)]
+    // fn WHEN_createTopBarIsCalled_THEN_aTopBarIsAddedToChildren() {
+    //     // WHEN create_top_bar is called
+    //     let mut home = Home::new_empty(rect![0, 0, 600, 800]);
+    //     home.create_top_bar();
+    //     // THEN a top bar is added to children
+    //     assert_eq!(home.children.len(), 1);
+    //     assert_eq!(home.children[0].rect(), &rect![0, 0, 16, 16]);
+    // }
 }
