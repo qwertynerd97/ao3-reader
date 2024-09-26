@@ -72,7 +72,7 @@ impl Works {
                                         rect.max.x, rect.min.y + small_height + big_thickness],
                                   Event::Toggle(ViewId::SearchBar),
                                   "".to_string(),
-                                  context);
+                                  context.settings.time_format.clone(), &mut context.fonts, &mut context.battery, context.settings.frontlight);
         children.push(Box::new(top_bar) as Box<dyn View>);
 
         let y_start = rect.min.y + small_height + big_thickness;

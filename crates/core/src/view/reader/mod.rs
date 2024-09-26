@@ -1612,7 +1612,7 @@ impl Reader {
                                             self.rect.min.y + small_height + big_thickness],
                                       Event::Back,
                                       self.info.title(),
-                                      context);
+                                      context.settings.time_format.clone(), &mut context.fonts, &mut context.battery, context.settings.frontlight);
 
             self.children.insert(index, Box::new(top_bar) as Box<dyn View>);
             index += 1;

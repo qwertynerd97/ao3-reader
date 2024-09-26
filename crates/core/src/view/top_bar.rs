@@ -1,7 +1,7 @@
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::gesture::GestureEvent;
 use crate::input::DeviceEvent;
-use crate::view::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, ViewId, Align, THICKNESS_MEDIUM};
+use crate::view::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, ViewId, Align, SMALL_BAR_HEIGHT, THICKNESS_MEDIUM};
 use crate::view::icon::Icon;
 use crate::view::clock::Clock;
 use crate::view::battery::Battery as BatteryWidget;
@@ -25,32 +25,32 @@ pub struct TopBar {
 }
 
 impl TopBar {
-    pub fn new_empty(rect: Rectangle) -> TopBar {
-        let id = ID_FEEDER.next();
-        let children = Vec::new();
+    pub fn new_empty(parent_rect: Rectangle) -> TopBar {
         let dpi = CURRENT_DEVICE.dpi;
+        let content_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
         let border_thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
-        let content_height = rect.height() as i32 - border_thickness;
 
         TopBar {
-            id,
-            rect,
-            children,
+            id: ID_FEEDER.next(),
+            rect: rect![
+                parent_rect.min.x, parent_rect.min.y,
+                parent_rect.max.x, parent_rect.min.y + content_height + border_thickness],
+            children: Vec::new(),
             content_height,
             border_thickness
         }
     }
-    pub fn new(rect: Rectangle, root_event: Event, title: String, context: &mut Context) -> TopBar {
-        let mut top_bar = TopBar::new_empty(rect);
+    pub fn new(parent_rect: Rectangle, root_event: Event, title: String,
+               format: String, fonts: &mut Fonts, battery: &mut Box<dyn Battery>, frontlight: bool) -> TopBar {
+        let mut top_bar = TopBar::new_empty(parent_rect);
 
-        // Left Align items
+        // Left aligned items
         top_bar.create_icon(root_event);
 
-        // Right align items
-        // TODO - remove dependency on context in order to follow principle of least access
-        top_bar.create_clock(context.settings.time_format.clone(), &mut context.fonts);
-        top_bar.create_battery(&mut context.battery);
-        top_bar.create_frontlight(context.settings.frontlight);
+        // Right aligned items
+        top_bar.create_clock(format, fonts);
+        top_bar.create_battery(battery);
+        top_bar.create_frontlight(frontlight);
         top_bar.create_menu();
 
         // Note: title needs to be declared last, because it takes up the remaining space
@@ -59,8 +59,6 @@ impl TopBar {
         top_bar.create_border();
         top_bar
     }
-
-
 
     fn create_icon(&mut self, root_event: Event) {
         let icon_name = match root_event {
@@ -243,10 +241,9 @@ mod tests {
     #[allow(non_snake_case)]
     fn WHEN_createIconIsCalledWithSearchEvent_THEN_aLeftAlignedSearchIconIsCreated() {
         // WHEN create_icon is called with Search Event
-        let width = 600;
-        let height = 67;
-        let border_thickness = 1;
-        let content_height = height - border_thickness;
+        let width = 300;
+        let height = 600;
+        let content_height = 67;
         let mut top_bar = TopBar::new_empty(rect![0, 0, width, height]);
         top_bar.create_icon(Event::Toggle(ViewId::SearchBar));
         // THEN a left-aligned Search Icon is created
@@ -260,10 +257,9 @@ mod tests {
     #[allow(non_snake_case)]
     fn WHEN_createIconIsCalledWithBackEvent_THEN_aLeftAlignedBackIconIsCreated() {
         // WHEN create_icon is called with Back Event
-        let width = 600;
-        let height = 67;
-        let border_thickness = 1;
-        let content_height = height - border_thickness;
+        let width = 300;
+        let height = 600;
+        let content_height = 67;
         let mut top_bar = TopBar::new_empty(rect![0, 0, width, height]);
         top_bar.create_icon(Event::Back);
         // THEN a left-aligned Back Icon is created
@@ -277,15 +273,14 @@ mod tests {
     #[allow(non_snake_case)]
     fn WHEN_createClockIsCalled_THEN_aRightAlignedClockWidgetIsCreated() {
         // WHEN create_clock is called
-        let width = 600;
-        let height = 67;
-        let border_thickness = 1;
-        let content_height = height - border_thickness;
+        let width = 300;
+        let height = 600;
+        let content_height = 67;
         let mut top_bar = TopBar::new_empty(rect![0, 0, width, height]);
         top_bar.create_clock("%H:%M".to_string(), &mut Fonts::load_with_prefix("../../").unwrap());
         // THEN a right-aligned Clock widget is created
         assert_eq!(top_bar.children.len(), 1);
-        assert_eq!(top_bar.children[0].rect(), &rect![338, 0, width-(content_height*3), content_height]);
+        assert_eq!(top_bar.children[0].rect(), &rect![35, 0, width-(content_height*3), content_height]);
         let _widget = top_bar.child_mut(0).downcast_mut::<Clock>().unwrap();
     }
 
@@ -293,10 +288,9 @@ mod tests {
     #[allow(non_snake_case)]
     fn WHEN_createBatteryIsCalled_THEN_aRightAlignedBatteryWidgetIsCreated() {
         // WHEN create_battery is called
-        let width = 600;
-        let height = 67;
-        let border_thickness = 1;
-        let content_height = height - border_thickness;
+        let width = 300;
+        let height = 600;
+        let content_height = 67;
         let mut top_bar = TopBar::new_empty(rect![0, 0, width, height]);
         let mut battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
         top_bar.create_battery(&mut battery);
@@ -310,10 +304,9 @@ mod tests {
     #[allow(non_snake_case)]
     fn WHEN_createFrontLightIsCalledWithLight_THEN_aRightAlignedFrontlightIconIsCreated() {
         // WHEN create_frontlight is called
-        let width = 600;
-        let height = 67;
-        let border_thickness = 1;
-        let content_height = height - border_thickness;
+        let width = 300;
+        let height = 600;
+        let content_height = 67;
         let mut top_bar = TopBar::new_empty(rect![0, 0, width, height]);
         top_bar.create_frontlight(true);
         // THEN a right-aligned Frontlight Icon is created
@@ -327,10 +320,9 @@ mod tests {
     #[allow(non_snake_case)]
     fn WHEN_createFrontLightIsCalledWithoutLight_THEN_aRightAlignedDisabledFrontlightIconIsCreated() {
         // WHEN create_frontlight is called
-        let width = 600;
-        let height = 67;
-        let border_thickness = 1;
-        let content_height = height - border_thickness;
+        let width = 300;
+        let height = 600;
+        let content_height = 67;
         let mut top_bar = TopBar::new_empty(rect![0, 0, width, height]);
         top_bar.create_frontlight(false);
         // THEN a right-aligned Disabled Frontlight Icon is created
@@ -344,10 +336,9 @@ mod tests {
     #[allow(non_snake_case)]
     fn WHEN_createMenuIsCalled_THEN_aRightAlignedMenuIconIsCreated() {
         // WHEN create_menu is called
-        let width = 600;
-        let height = 67;
-        let border_thickness = 1;
-        let content_height = height - border_thickness;
+        let width = 300;
+        let height = 600;
+        let content_height = 67;
         let mut top_bar = TopBar::new_empty(rect![0, 0, width, height]);
         top_bar.create_menu();
         // THEN a right-aligned Menu Icon is created
@@ -361,10 +352,9 @@ mod tests {
     #[allow(non_snake_case)]
     fn WHEN_createTitleIsCalled_THEN_aCenteredTitleIsCreated() {
         // WHEN create_title is called
-        let width = 600;
-        let height = 67;
-        let border_thickness = 1;
-        let content_height = height - border_thickness;
+        let width = 300;
+        let height = 600;
+        let content_height = 67;
         let mut top_bar = TopBar::new_empty(rect![0, 0, width, height]);
         top_bar.create_title("Test Title".to_string());
         // THEN a centered Title is created
@@ -377,10 +367,9 @@ mod tests {
     #[allow(non_snake_case)]
     fn GIVEN_otherChildrenHaveBeenCreated_WHEN_createTitleIsCalled_THEN_aSmallerCenteredTitleIsCreated() {
         // GIVEN other children have been created
-        let width = 600;
-        let height = 67;
-        let border_thickness = 1;
-        let content_height = height - border_thickness;
+        let width = 300;
+        let height = 600;
+        let content_height = 67;
         let mut top_bar = TopBar::new_empty(rect![0, 0, width, height]);
         top_bar.create_menu();
         // WHEN create_title is called
@@ -395,14 +384,15 @@ mod tests {
     #[allow(non_snake_case)]
     fn WHEN_createBorderIsCalled_THEN_aLineIsCreated() {
         // WHEN create_border is called
-        let width = 600;
-        let height = 67;
+        let width = 300;
+        let height = 600;
+        let content_height = 67;
         let border_thickness = 1;
         let mut top_bar = TopBar::new_empty(rect![0, 0, width, height]);
         top_bar.create_border();
         // THEN a line is created
         assert_eq!(top_bar.children.len(), 1);
-        assert_eq!(top_bar.children[0].rect(), &rect![0, height-border_thickness, width, height]);
+        assert_eq!(top_bar.children[0].rect(), &rect![0, content_height, width, content_height+border_thickness]);
         let _title = top_bar.child_mut(0).downcast_mut::<Filler>().unwrap();
     }
 }
