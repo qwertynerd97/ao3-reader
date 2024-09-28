@@ -24,7 +24,6 @@ use serde::{Serialize, Deserialize};
 use self::pdf::PdfOpener;
 use self::epub::EpubDocument;
 use self::html::HtmlDocument;
-use self::ao3::Ao3Document;
 use crate::geom::{Boundary, CycleDir};
 use crate::metadata::{TextAlign, Annotation};
 use crate::framebuffer::Pixmap;

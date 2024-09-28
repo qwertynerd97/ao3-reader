@@ -11,7 +11,7 @@ use reqwest::blocking::Client;
 use reqwest::redirect::Policy;
 use reqwest::StatusCode;
 
-use ao3reader_core::anyhow::{Error, Context as ResultExt, format_err};
+use ao3reader_core::anyhow::{Error, Context as ResultExt};
 use ao3reader_core::chrono::Local;
 use ao3reader_core::framebuffer::{Framebuffer, KoboFramebuffer1, KoboFramebuffer2, UpdateMode};
 use ao3reader_core::view::{View, Event, EntryId, EntryKind, ViewId, AppCmd, RenderData, RenderQueue, UpdateData};
@@ -29,9 +29,6 @@ use ao3reader_core::input::{raw_events, device_events, usb_events, display_rotat
 use ao3reader_core::gesture::{GestureEvent, gesture_events};
 use ao3reader_core::helpers::{load_toml, save_toml, get_url};
 use ao3reader_core::settings::{ButtonScheme, Settings, SETTINGS_PATH, RotationLock, IntermKind};
-use ao3reader_core::frontlight::{Frontlight, StandardFrontlight, NaturalFrontlight, PremixedFrontlight};
-use ao3reader_core::lightsensor::{LightSensor, KoboLightSensor};
-use ao3reader_core::battery::{Battery, KoboBattery};
 use ao3reader_core::geom::{Rectangle, DiagDir, Region};
 use ao3reader_core::view::works::{Works, IndexType};
 use ao3reader_core::view::reader::Reader;
@@ -40,16 +37,12 @@ use ao3reader_core::view::home::Home;
 use ao3reader_core::view::overlay::about::About;
 use ao3reader_core::view::intermission::Intermission;
 use ao3reader_core::view::notification::Notification;
-use ao3reader_core::device::{CURRENT_DEVICE, Orientation, FrontlightKind};
-use ao3reader_core::library::Library;
-use ao3reader_core::http::{HttpClient, update_session};
-use ao3reader_core::font::Fonts;
-use ao3reader_core::rtc::Rtc;
+use ao3reader_core::device::{CURRENT_DEVICE, Orientation};
+use ao3reader_core::http::update_session;
 use ao3reader_core::context::Context;
 
-pub const APP_NAME: &str = "Plato";
+pub const APP_NAME: &str = "AO3 Reader";
 const FB_DEVICE: &str = "/dev/fb0";
-const RTC_DEVICE: &str = "/dev/rtc0";
 const TOUCH_INPUTS: [&str; 5] = ["/dev/input/by-path/platform-2-0010-event",
                                  "/dev/input/by-path/platform-1-0038-event",
                                  "/dev/input/by-path/platform-1-0010-event",
@@ -88,52 +81,6 @@ struct HistoryItem {
     rotation: i8,
     monochrome: bool,
     dithered: bool,
-}
-
-fn build_context(fb: Box<dyn Framebuffer>) -> Result<Context, Error> {
-    let rtc = Rtc::new(RTC_DEVICE)
-                  .map_err(|e| eprintln!("Can't open RTC device: {:#}.", e))
-                  .ok();
-    let path = Path::new(SETTINGS_PATH);
-    let mut settings = if path.exists() {
-        load_toml::<Settings, _>(path).context("can't load settings")?
-    } else {
-        Default::default()
-    };
-
-    if settings.libraries.is_empty() {
-        return Err(format_err!("no libraries found"));
-    }
-
-    if settings.selected_library >= settings.libraries.len() {
-        settings.selected_library = 0;
-    }
-
-    let library_settings = &settings.libraries[settings.selected_library];
-    let library = Library::new(&library_settings.path, library_settings.mode)?;
-
-    let fonts = Fonts::load().context("can't load fonts")?;
-
-    let battery = Box::new(KoboBattery::new().context("can't create battery")?) as Box<dyn Battery>;
-
-    let lightsensor = if CURRENT_DEVICE.has_lightsensor() {
-        Box::new(KoboLightSensor::new().context("can't create light sensor")?) as Box<dyn LightSensor>
-    } else {
-        Box::new(0u16) as Box<dyn LightSensor>
-    };
-
-    let levels = settings.frontlight_levels;
-    let frontlight = match CURRENT_DEVICE.frontlight_kind() {
-        FrontlightKind::Standard => Box::new(StandardFrontlight::new(levels.intensity)
-                                        .context("can't create standard frontlight")?) as Box<dyn Frontlight>,
-        FrontlightKind::Natural => Box::new(NaturalFrontlight::new(levels.intensity, levels.warmth)
-                                        .context("can't create natural frontlight")?) as Box<dyn Frontlight>,
-        FrontlightKind::Premixed => Box::new(PremixedFrontlight::new(levels.intensity, levels.warmth)
-                                        .context("can't create premixed frontlight")?) as Box<dyn Frontlight>,
-    };
-
-    Ok(Context::new(fb, rtc, library, settings,
-                    fonts, battery, frontlight, lightsensor))
 }
 
 fn schedule_task(id: TaskId, event: Event, delay: Duration, hub: &Sender<Event>, tasks: &mut Vec<Task>) {
@@ -227,26 +174,33 @@ pub fn run() -> Result<(), Error> {
         fb.set_rotation(startup_rotation).ok();
     }
 
-    let mut context = build_context(fb).context("can't build context")?;
+    let mut context = Context::new_from_kobo(fb);
 
+    // TODO - why is this not replicated in emulator?
     context.plugged = context.battery.status().is_ok_and(|v| v[0].is_wired());
 
+    // TODO - investigate
+    // This looks like it only force-enables wifi the first time it ever starts
+    // the reader, because it mutates the settings, which from then on does not
+    // change or activate the enable wifi script
+    // this also blocks the ui thread while waiting for wifi to be enabled :(
     set_wifi(true, &mut context);
-    if !context.client.test_login() {
-        if let (Some(username), Some(password)) = (
-                context.settings.ao3.username.clone(),
-                context.settings.ao3.password.clone(),
-            )
-        {
-            context.client.login(&username, &password);
-        }
-    }
+    // TODO - can this be async instead of on startup?
+    // Similarly, can we open the AO3 Reader intantly with a loading
+    // page that indicates setup status, instead of freezing the Kobo screen?
+    // Ideally AO3 Reader UI would be much snappier
+    context.client.renew_login();
+
+    // TODO - these do not seem to be used in AO3 Reader since it does not
+    // actually import libraries.  Leaving for now, but skipping testing
     if context.settings.import.startup_trigger {
         context.batch_import();
     }
     context.load_dictionaries();
     context.load_keyboard_layouts();
 
+    // Kobo inputs that are not mimocked in the emuator
+    // Skipping teting for now
     let mut paths = Vec::new();
     for ti in &TOUCH_INPUTS {
         if Path::new(ti).exists() {
@@ -267,6 +221,7 @@ pub fn run() -> Result<(), Error> {
         }
     }
 
+    // Add input sources into a single FIFO queue
     let (raw_sender, raw_receiver) = raw_events(paths);
     let touch_screen = gesture_events(device_events(raw_receiver, context.display, context.settings.button_scheme));
     let usb_port = usb_events();

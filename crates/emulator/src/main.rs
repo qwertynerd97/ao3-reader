@@ -36,16 +36,11 @@ use ao3reader_core::view::touch_events::TouchEvents;
 use ao3reader_core::view::rotation_values::RotationValues;
 use ao3reader_core::view::common::{locate, locate_by_id, transfer_notifications, overlapping_rectangle};
 use ao3reader_core::view::common::{toggle_input_history_menu, toggle_keyboard_layout_menu};
-use ao3reader_core::helpers::{load_toml, save_toml};
-use ao3reader_core::settings::{Settings, SETTINGS_PATH, IntermKind};
+use ao3reader_core::helpers::{save_toml};
+use ao3reader_core::settings::{SETTINGS_PATH, IntermKind};
 use ao3reader_core::geom::{Rectangle, Axis};
 use ao3reader_core::gesture::{GestureEvent, gesture_events};
 use ao3reader_core::device::CURRENT_DEVICE;
-use ao3reader_core::battery::{Battery, FakeBattery};
-use ao3reader_core::frontlight::{Frontlight, LightLevels};
-use ao3reader_core::lightsensor::LightSensor;
-use ao3reader_core::library::Library;
-use ao3reader_core::font::Fonts;
 use ao3reader_core::context::Context;
 use ao3reader_core::pt;
 use ao3reader_core::png;
@@ -53,25 +48,10 @@ use reqwest::blocking::Client;
 use reqwest::redirect::Policy;
 use reqwest::StatusCode;
 
-pub const APP_NAME: &str = "Plato";
+pub const APP_NAME: &str = "AO3 Reader";
 const DEFAULT_ROTATION: i8 = 1;
 
 const CLOCK_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
-
-
-pub fn build_context(fb: Box<dyn Framebuffer>) -> Result<Context, Error> {
-    let settings = load_toml::<Settings, _>(SETTINGS_PATH)?;
-    let library_settings = &settings.libraries[settings.selected_library];
-    let library = Library::new(&library_settings.path, library_settings.mode)?;
-
-    let battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
-    let frontlight = Box::new(LightLevels::default()) as Box<dyn Frontlight>;
-    let lightsensor = Box::new(0u16) as Box<dyn LightSensor>;
-    let fonts = Fonts::load()?;
-
-    Ok(Context::new(fb, None, library, settings,
-                    fonts, battery, frontlight, lightsensor))
-}
 
 #[inline]
 fn seconds(timestamp: u32) -> f64 {
@@ -229,7 +209,7 @@ fn main() -> Result<(), Error> {
     let video_subsystem = sdl_context.video().unwrap();
     let (width, height) = CURRENT_DEVICE.dims;
     let window = video_subsystem
-                 .window("Plato Emulator", width, height)
+                 .window("AO3 Reader Emulator", width, height)
                  .position_centered()
                  .build()
                  .unwrap();
@@ -237,17 +217,8 @@ fn main() -> Result<(), Error> {
     let mut fb = window.into_canvas().software().build().unwrap();
     fb.set_blend_mode(BlendMode::Blend);
 
-    let mut context = build_context(Box::new(FBCanvas(fb)))?;
-
-    if !context.client.test_login() {
-        if let (Some(username), Some(password)) = (
-                context.settings.ao3.username.clone(),
-                context.settings.ao3.password.clone(),
-            )
-        {
-            context.client.login(&username, &password);
-        }
-    }
+    let mut context = Context::new_from_virtual(Box::new(FBCanvas(fb)));
+    context.client.renew_login();
 
     if context.settings.import.startup_trigger {
         context.batch_import();
@@ -256,6 +227,7 @@ fn main() -> Result<(), Error> {
     context.load_dictionaries();
     context.load_keyboard_layouts();
 
+    // Add input sources into a single FIFO queue
     let (tx, rx) = mpsc::channel();
     let (ty, ry) = mpsc::channel();
     let touch_screen = gesture_events(ry);
@@ -291,15 +263,15 @@ fn main() -> Result<(), Error> {
         context.frontlight.set_intensity(0.0);
     }
 
-    println!("{} is running on a Kobo {}.", APP_NAME,
+    println!("{} is running virtually {}.", APP_NAME,
                                             CURRENT_DEVICE.model);
     println!("The framebuffer resolution is {} by {}.", context.fb.rect().width(),
                                                         context.fb.rect().height());
 
-
-
     let mut bus = VecDeque::with_capacity(4);
 
+    // Handle the inputs
+    // TODO - why are these different between the Kobo app and the emulator
     'outer: loop {
         let mut event_pump = sdl_context.event_pump().unwrap();
         while let Some(sdl_evt) = event_pump.poll_event() {

@@ -20,15 +20,13 @@ use crate::view::label::Label;
 pub struct ToolBar {
     id: Id,
     rect: Rectangle,
-    children: Vec<Box<dyn View>>,
-    reflowable: bool,
-    has_chapters: bool,
+    children: Vec<Box<dyn View>>
 }
 
 impl ToolBar {
     pub fn new(
         rect: Rectangle,
-        reflowable: bool,
+        _reflowable: bool,
         _reader_info: Option<&ReaderInfo>,
         _reader_settings: &ReaderSettings,
         has_chapters: bool,
@@ -112,9 +110,7 @@ impl ToolBar {
         ToolBar {
             id,
             rect,
-            children,
-            reflowable,
-            has_chapters,
+            children
         }
     }
 

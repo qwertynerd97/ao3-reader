@@ -19,4 +19,5 @@
 /plato-*.zip
 /thirdparty/*/*
 !/thirdparty/*/*kobo*
-*.kate_swap
+*.kate-swp
+*TestSettings.toml

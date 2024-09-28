@@ -1048,10 +1048,10 @@ impl Reader {
         }
     }
 
-    fn update_tool_bar(&mut self, rq: &mut RenderQueue, context: &mut Context) {
+    fn update_tool_bar(&mut self, _rq: &mut RenderQueue, context: &mut Context) {
         if let Some(index) = locate::<ToolBar>(self) {
-            let tool_bar = self.children[index].as_mut().downcast_mut::<ToolBar>().unwrap();
-            let settings = &context.settings;
+            let _tool_bar = self.children[index].as_mut().downcast_mut::<ToolBar>().unwrap();
+            let _settings = &context.settings;
             // if self.reflowable {
             //     let font_family = self.info.reader.as_ref()
             //                           .and_then(|r| r.font_family.clone())
@@ -1600,7 +1600,7 @@ impl Reader {
             let dpi = CURRENT_DEVICE.dpi;
             let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
             let (small_thickness, big_thickness) = halves(thickness);
-            let (small_height, big_height) = (scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32,
+            let (small_height, _big_height) = (scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32,
                                               scale_by_dpi(BIG_BAR_HEIGHT, dpi) as i32);
 
             let mut doc = self.doc.lock().unwrap();
@@ -1612,7 +1612,7 @@ impl Reader {
                                             self.rect.min.y + small_height + big_thickness],
                                       Event::Back,
                                       self.info.title(),
-                                      context);
+                                      context.settings.time_format.clone(), &mut context.fonts, &mut context.battery, context.settings.frontlight);
 
             self.children.insert(index, Box::new(top_bar) as Box<dyn View>);
             index += 1;
@@ -2150,7 +2150,7 @@ impl Reader {
                 return;
             }
 
-            let reflowable = self.reflowable;
+            let _reflowable = self.reflowable;
             let margin_width = context.settings.reader.margin_width;
             let entries = (0..=10).map(|mw| EntryKind::RadioButton(format!("{}", mw),
                                                                   EntryId::SetMarginWidth(mw),
@@ -3233,7 +3233,7 @@ impl View for Reader {
 
                 if let Some(link) = nearest_link.take() {
                     let pdf_page = Regex::new(r"^#page=(\d+).*$").unwrap();
-                    let djvu_page = Regex::new(r"^#([+-])?(\d+)$").unwrap();
+                    let _djvu_page = Regex::new(r"^#([+-])?(\d+)$").unwrap();
                     let toc_page = Regex::new(r"^@(.+)$").unwrap();
                     if let Some(caps) = toc_page.captures(&link.text) {
                         let loc_opt = if caps[1].chars().all(|c| c.is_digit(10)) {

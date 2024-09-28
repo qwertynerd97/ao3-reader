@@ -14,7 +14,7 @@ pub struct TextLabel {
     rect: Rectangle,
     children: Vec<Box<dyn View>>,
     background: u8,
-    text: String,
+    pub text: String,
     align: Align,
     font: Style,
     event: Event,

@@ -101,7 +101,7 @@ impl Dictionary {
                                         rect.max.x, rect.min.y + small_height - small_thickness],
                                   Event::Back,
                                   "Dictionary".to_string(),
-                                  context);
+                                  context.settings.time_format.clone(), &mut context.fonts, &mut context.battery, context.settings.frontlight);
         children.push(Box::new(top_bar) as Box<dyn View>);
 
         let search_bar = SearchBar::new(rect![rect.min.x, rect.min.y + small_height + big_thickness,

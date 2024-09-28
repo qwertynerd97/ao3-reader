@@ -18,11 +18,12 @@ pub struct Clock {
 }
 
 impl Clock {
-    pub fn new(rect: &mut Rectangle, context: &mut Context) -> Clock {
+    pub fn new(rect: &mut Rectangle, format: String, fonts: &mut Fonts) -> Clock {
         let time = Local::now();
-        let format = context.settings.time_format.clone();
-        let font = font_from_style(&mut context.fonts, &NORMAL_STYLE, CURRENT_DEVICE.dpi);
+        let font = font_from_style(fonts, &NORMAL_STYLE, CURRENT_DEVICE.dpi);
         let width = font.plan(&time.format(&format).to_string(), None, None).width + font.em() as i32;
+
+        // Note: clock is assumed to be right-aligned, so we adjust the min x
         rect.min.x = rect.max.x - width;
         Clock {
             id: ID_FEEDER.next(),

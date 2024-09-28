@@ -15,8 +15,7 @@ pub struct Text {
     background: u8,
     text: String,
     align: Align,
-    font: Style,
-    plan: Option<RenderPlan>
+    font: Style
 }
 
 impl Text {
@@ -29,8 +28,7 @@ impl Text {
             background: TEXT_NORMAL[0],
             text,
             align,
-            font,
-            plan: None
+            font
         }
     }
 
@@ -61,7 +59,7 @@ impl Text {
 }
 
 impl View for Text {
-    fn handle_event(&mut self, evt: &Event, _hub: &Hub, bus: &mut Bus, rq: &mut RenderQueue, _context: &mut Context) -> bool {
+    fn handle_event(&mut self, evt: &Event, _hub: &Hub, _bus: &mut Bus, _rq: &mut RenderQueue, _context: &mut Context) -> bool {
         match *evt {
             _ => false,
         }
