@@ -803,7 +803,7 @@ pub fn run() -> Result<(), Error> {
                             StatusCode::OK => {
                                 view.children_mut().retain(|child| !child.is::<Menu>());
                                 let mut next_view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), link_uri, &tx,
-                                                                     &mut rq, &mut context, IndexType::Works)?);
+                                                                     &mut rq, &mut context, IndexType::TagWorks)?);
                                 transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
                                 history.push(HistoryItem {
                                     view,
@@ -823,7 +823,75 @@ pub fn run() -> Result<(), Error> {
                                             if loc_str.ends_with("/works") {
                                                 view.children_mut().retain(|child| !child.is::<Menu>());
                                                 let mut next_view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), loc_str, &tx,
-                                                                                     &mut rq, &mut context, ao3reader_core::view::works::IndexType::Works)?);
+                                                                                     &mut rq, &mut context, ao3reader_core::view::works::IndexType::TagWorks)?);
+                                                transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
+                                                history.push(HistoryItem {
+                                                    view,
+                                                    rotation: context.display.rotation,
+                                                    monochrome: context.fb.monochrome(),
+                                                    dithered: context.fb.dithered(),
+                                                });
+                                                view = next_view;
+                                            }
+                                        }
+                                    } else {
+                                        // TODO: change this when we can look at tag pages
+                                        let msg = format!("Unwrangled tag! No works available.");
+                                        let notif = Notification::new(msg, &tx, &mut rq, &mut context);
+                                        view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                                    }
+                            },
+                            _ => {
+                                println!("Got {} for {}", r.status(), link_uri);
+                                let msg = format!("Error: {}", r.status());
+                                let notif = Notification::new(msg, &tx, &mut rq, &mut context);
+                                view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        println!("Error fetching {} - {}", link_uri, e);
+                        let msg = format!("Error: {}", e);
+                        let notif = Notification::new(msg, &tx, &mut rq, &mut context);
+                        view.children_mut().push(Box::new(notif) as Box<dyn View>);
+                    }
+                };
+
+            },
+            Event::LoadSearch( query) => {
+                println!("loading search {}", query);
+
+                let link_uri = format!("https://archiveofourown.org/works/search?work_search%5Bquery%5D={}", query);
+                let url = get_url(&link_uri);
+                let client = Client::builder().redirect(Policy::none()).build().unwrap();
+                let res = client.get(url.as_str()).send();
+                match res {
+                    Ok(r) => {
+                        match r.status() {
+                            StatusCode::OK => {
+                                view.children_mut().retain(|child| !child.is::<Menu>());
+                                let mut next_view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), link_uri, &tx,
+                                                                     &mut rq, &mut context, IndexType::Search(query))?);
+                                transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
+                                history.push(HistoryItem {
+                                    view,
+                                    rotation: context.display.rotation,
+                                    monochrome: context.fb.monochrome(),
+                                    dithered: context.fb.dithered(),
+                                });
+                                view = next_view;
+                            },
+                            StatusCode::FOUND |
+                                StatusCode::MOVED_PERMANENTLY => {
+                                    // Check if we're being redirected to a different works index
+                                    // because of tag synning
+                                    if let Some(loc) = r.headers().get(reqwest::header::LOCATION) {
+                                        if let Ok(loc) = loc.to_str() {
+                                            let loc_str = loc.to_string();
+                                            if loc_str.ends_with("/works") {
+                                                view.children_mut().retain(|child| !child.is::<Menu>());
+                                                let mut next_view: Box<dyn View> = Box::new(Works::new(context.fb.rect(), loc_str, &tx,
+                                                                                     &mut rq, &mut context, ao3reader_core::view::works::IndexType::TagWorks)?);
                                                 transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
                                                 history.push(HistoryItem {
                                                     view,

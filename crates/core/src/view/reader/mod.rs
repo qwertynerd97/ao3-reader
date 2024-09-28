@@ -499,6 +499,13 @@ impl Reader {
         doc.set_line_height(context.settings.reader.line_height);
         doc.set_font_size(context.settings.reader.font_size);
         doc.set_text_align(context.settings.reader.text_align);
+
+        let font_family = &context.settings.reader.font_family;
+
+        if font_family != DEFAULT_FONT_FAMILY {
+            doc.set_font_family(font_family, &context.settings.reader.font_path);
+        }
+
         
         doc.layout(width, height, font_size, CURRENT_DEVICE.dpi);
         let pages_count = doc.pages_count();

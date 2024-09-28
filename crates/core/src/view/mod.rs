@@ -21,6 +21,7 @@ pub mod input_field;
 pub mod page_label;
 pub mod named_input;
 pub mod labeled_icon;
+pub mod bottom_bar;
 pub mod top_bar;
 pub mod search_bar;
 pub mod dialog;
@@ -396,6 +397,7 @@ pub enum Event {
     LoadIndex(String),
     LoadHistory(HistoryView),
     OpenWork(String),
+    LoadSearch(String),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
