@@ -18,7 +18,7 @@ pub struct BottomBar {
 }
 
 impl BottomBar {
-    pub fn new(rect: Rectangle, current_page: usize, pages_count: usize, name: &str, count: usize, filter: bool) -> BottomBar {
+    pub fn new(rect: Rectangle, current_page: usize, pages_count: usize) -> BottomBar {
         let id = ID_FEEDER.next();
         let mut children = Vec::new();
         let side = rect.height() as i32;
@@ -37,7 +37,7 @@ impl BottomBar {
             children.push(Box::new(prev_icon) as Box<dyn View>);
         }
 
-        let (small_half_width, big_half_width) = halves(rect.width() as i32 - 2 * side);
+        let (_small_half_width, big_half_width) = halves(rect.width() as i32 - 2 * side);
 
         let page_label = PageLabel::new(rect![rect.max.x - side - big_half_width, rect.min.y,
                                               rect.max.x - side, rect.max.y],

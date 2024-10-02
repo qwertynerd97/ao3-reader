@@ -4,7 +4,7 @@ use crate::view::{View, Event, Hub, Bus, RenderQueue, Align, ViewId, Id, ID_FEED
 use crate::view::{MINI_BAR_HEIGHT, THICKNESS_MEDIUM, SMALL_PADDING, SMALL_BAR_HEIGHT, BIG_BAR_HEIGHT};
 use crate::context::Context;
 use crate::unit::scale_by_dpi;
-use crate::geom::Rectangle;
+use crate::geom::{halves, Rectangle};
 use crate::color::{BLACK, WHITE};
 use crate::device::CURRENT_DEVICE;
 use crate::framebuffer::{Framebuffer, UpdateMode};
@@ -25,81 +25,22 @@ pub struct Home {
     children: Vec<Box<dyn View>>,
     id: Id,
     view_id: ViewId,
+    shelf_index: usize,
+    focus: Option<ViewId>,
+    query: Option<String>
 }
 
 impl Home {
     pub fn new_empty(rect: Rectangle) -> Home {
         let id = ID_FEEDER.next();
-        let mut children = Vec::new();
-        let dpi = CURRENT_DEVICE.dpi;
-
-        let bg = Filler::new(rect, WHITE);
-        children.push(Box::new(bg) as Box<dyn View>);
-
-        let padding = scale_by_dpi(SMALL_PADDING, dpi) as i32;
-        let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
-        let (small_thickness, big_thickness) = halves(thickness);
-        let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
-
-        let top_bar = TopBar::new(rect![rect.min.x, rect.min.y,
-                                        rect.max.x, rect.min.y + small_height + big_thickness],
-                                  Event::Toggle(ViewId::SearchBar),
-                                  "Favorite Tags".to_string(),
-                                  context);
-        children.push(Box::new(top_bar) as Box<dyn View>);
-
-
-        let entries_rect =  rect![rect.min.x, rect.min.y + small_height + big_thickness,
-        rect.max.x, rect.max.y];
-        let rows = row_calc(entries_rect);
-        let row_height = rect.height() as i32 / rows as i32;
-        let faves = &context.settings.ao3.faves;
-        let end = if faves.len() > rows {rows} else {faves.len()};
-
-        let x_min = rect.min.x; // + padding;
-        let x_max = rect.max.x; // - padding;
-        let mut start_y = rect.min.y + small_height + big_thickness;
-
-        for n in 0..end {
-            let sep_rect = rect![x_min, start_y,
-            x_max, start_y + thickness];
-            let sep = Filler::new(sep_rect, BLACK);
-            children.push(Box::new(sep) as Box<dyn View>);
-            let label_rect = rect![x_min, start_y + thickness,
-            x_max, start_y + row_height];
-            let loc = faves[n].1.clone();
-
-            let chapter = TextLabel::new(label_rect,
-                                (*faves[n].0).to_string(),
-                                Align::Left(padding), LABEL_STYLE, Event::LoadIndex(loc.to_string()));
-                                children.push(Box::new(chapter) as Box<dyn View>);
-            start_y += row_height;
-        }
-
-        let sep_rect = rect![x_min, start_y,
-        x_max, start_y + thickness];
-        let sep = Filler::new(sep_rect, BLACK);
-        children.push(Box::new(sep) as Box<dyn View>);
-        
-        // Link to 'Marked for Later' view
-        if context.client.logged_in {
-            let label_rect = rect![x_min, start_y + thickness,
-            x_max, start_y + row_height];
-            let history = TextLabel::new(label_rect,
-                "Marked For Later".to_string(),
-                Align::Left(padding), BOLD_STYLE, Event::LoadHistory(super::works::HistoryView::MarkedForLater));
-                children.push(Box::new(history) as Box<dyn View>);
-
-        }
-
-
-        rq.add(RenderData::new(id, rect, UpdateMode::Full));
+        let children = Vec::new();
     
         Home {
             rect,
             children,
             id,
             view_id: ViewId::Home,
+            shelf_index: 0,
             query: None,
             focus: None,
         }
@@ -125,6 +66,8 @@ impl Home {
         let label_padding = scale_by_dpi(SMALL_PADDING, dpi) as i32;
         let row_height = label_content_height + label_seperator_thickness;
 
+
+
         // Link to 'Marked for Later' view
         if context.client.logged_in {
             home.create_marked_for_later(top_pos, label_content_height, label_padding, label_seperator_thickness);
@@ -139,21 +82,8 @@ impl Home {
             fav_index = fav_index + 1;
         }
 
-        let shelf_index = home.children.len() - 1;
-
-        let separator = Filler::new(rect![rect.min.x, rect.max.y - small_height - small_thickness,
-            rect.max.x, rect.max.y - small_height + big_thickness],
-      BLACK);
-        home.children.push(Box::new(separator) as Box<dyn View>);
-
-        let bottom_bar = BottomBar::new(rect![rect.min.x, rect.max.y - small_height + big_thickness,
-            rect.max.x, rect.max.y],
-            1,
-            1,
-            "test",
-            2,
-            false);
-            home.children.push(Box::new(bottom_bar) as Box<dyn View>);
+        home.set_shelf_index(home.children.len() - 1); 
+        home.create_bottom_bar();
 
         rq.add(RenderData::new(home.id, rect, UpdateMode::Full));
         home
@@ -164,12 +94,35 @@ impl Home {
         self.children.push(Box::new(bg) as Box<dyn View>);
     }
 
+    fn set_shelf_index(&mut self, index: usize) {
+        self.shelf_index = index;
+    }
+
     fn create_top_bar(&mut self, format: String, fonts: &mut Fonts, battery: &mut Box<dyn Battery>, frontlight: bool) {
         let top_bar = TopBar::new(self.rect,
                                   Event::Toggle(ViewId::SearchBar),
                                   "Favorite Tags".to_string(),
                                   format, fonts, battery, frontlight);
         self.children.push(Box::new(top_bar) as Box<dyn View>);
+    }
+
+    fn create_bottom_bar(&mut self) {
+        let dpi = CURRENT_DEVICE.dpi;
+        let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
+        let small_height= scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
+        let (small_thickness, big_thickness) = halves(thickness);
+
+        let separator = Filler::new(rect![self.rect.min.x, self.rect.max.y - small_height - small_thickness,
+            self.rect.max.x, self.rect.max.y - small_height + big_thickness],
+      BLACK);
+        self.children.push(Box::new(separator) as Box<dyn View>);
+        // TODO: should eventually actually allow flipping through pages, if there are more favorites than will fit on one page
+        let bottom_bar = BottomBar::new(rect![self.rect.min.x, self.rect.max.y - small_height + big_thickness,
+            self.rect.max.x, self.rect.max.y],
+            0,
+            1);
+        self.children.push(Box::new(bottom_bar) as Box<dyn View>);
+
     }
 
     fn create_marked_for_later(&mut self, top_pos: i32, label_content_height: i32, label_padding: i32, label_seperator_thickness: i32) {
@@ -209,8 +162,7 @@ impl Home {
 
     fn toggle_search_bar(&mut self, enable: Option<bool>, update: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
         let dpi = CURRENT_DEVICE.dpi;
-        let (small_height, big_height) = (scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32,
-                                          scale_by_dpi(BIG_BAR_HEIGHT, dpi) as i32);
+        let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
         let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
         let delta_y = small_height;
         let search_visible: bool;
@@ -221,8 +173,8 @@ impl Home {
                 return;
             }
 
-            if let Some(ViewId::HomeSearchInput) = self.focus {
-                self.toggle_keyboard(false, false, Some(ViewId::HomeSearchInput), hub, rq, context);
+            if let Some(ViewId::SiteTextSearchInput) = self.focus {
+                self.toggle_keyboard(false, false, Some(ViewId::SiteTextSearchInput), hub, rq, context);
             }
 
             // Remove the search bar and its separator.
@@ -242,7 +194,7 @@ impl Home {
             let search_bar = SearchBar::new(rect![self.rect.min.x, sp_rect.max.y,
                                                   self.rect.max.x,
                                                   sp_rect.max.y + delta_y - thickness],
-                                            ViewId::HomeSearchInput,
+                                            ViewId::SiteTextSearchInput,
                                             "Search Ao3",
                                             "", context);
             self.children.insert(self.shelf_index+1, Box::new(search_bar) as Box<dyn View>);
@@ -255,11 +207,11 @@ impl Home {
 
             if self.query.is_none() {
                 if rlocate::<Keyboard>(self).is_none() {
-                    self.toggle_keyboard(true, false, Some(ViewId::HomeSearchInput), hub, rq, context);
+                    self.toggle_keyboard(true, false, Some(ViewId::SiteTextSearchInput), hub, rq, context);
                     has_keyboard = true;
                 }
 
-                hub.send(Event::Focus(Some(ViewId::HomeSearchInput))).ok();
+                hub.send(Event::Focus(Some(ViewId::SiteTextSearchInput))).ok();
             }
 
             search_visible = true;
@@ -267,7 +219,6 @@ impl Home {
 
         if update {
             if !search_visible {
-                println!("running search?");
                 rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
             }
 
@@ -286,7 +237,6 @@ impl Home {
             } else {
                 for i in self.shelf_index - 1 ..= self.shelf_index + 1 {
                     if i == self.shelf_index {
-                        // self.update_shelf(true, hub, rq, context);
                         continue;
                     }
                     rq.add(RenderData::new(self.child(i).id(), *self.child(i).rect(), UpdateMode::Partial));
@@ -428,11 +378,15 @@ impl View for Home {
                 toggle_main_menu(self, Rectangle::default(), Some(false), rq, context);
                 true
             },
+            Event::ToggleNear(ViewId::SearchMenu, _rect) => {
+                hub.send(Event::SubmitInput(ViewId::SiteTextSearchInput)).ok();
+                true
+            },
             Event::Close(ViewId::SearchBar) => {
                 self.toggle_search_bar(Some(false), true, hub, rq, context);
                 true
             },
-            Event::Submit(ViewId::HomeSearchInput, ref text) => {
+            Event::Submit(ViewId::SiteTextSearchInput, ref text) => {
                 self.query = Some(text.to_string());
                 if self.query.is_some() {
                     self.toggle_keyboard(false, false, None, hub, rq, context);

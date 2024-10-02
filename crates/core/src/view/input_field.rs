@@ -224,6 +224,18 @@ impl View for InputField {
                 }
                 false
             },
+            Event::SubmitInput(view_id) => {
+                println!("Submitting for {:?}", self.view_id);
+                if view_id == self.view_id {
+                    bus.push_back(Event::Submit(self.view_id, self.text.clone()));
+                    context.record_input(&self.text, self.view_id);
+                    rq.add(RenderData::no_wait(self.id, self.rect, UpdateMode::Gui));
+                    true
+                } else {
+                    false
+                }
+                
+            },
             Event::Keyboard(kbd_evt) if self.focused => {
                 match kbd_evt {
                     KeyboardEvent::Append(c) => {

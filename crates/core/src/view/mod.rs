@@ -398,6 +398,7 @@ pub enum Event {
     LoadHistory(HistoryView),
     OpenWork(String),
     LoadSearch(String),
+    SubmitInput(ViewId),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -453,7 +454,7 @@ pub enum ViewId {
     EditNoteInput,
     EditLanguages,
     EditLanguagesInput,
-    HomeSearchInput,
+    SiteTextSearchInput,
     ReaderSearchInput,
     DictionarySearchInput,
     CalculatorInput,

@@ -506,6 +506,12 @@ impl Reader {
             doc.set_font_family(font_family, &context.settings.reader.font_path);
         }
 
+        let hyphen_penalty = context.settings.reader.paragraph_breaker.hyphen_penalty;
+
+        if hyphen_penalty != HYPHEN_PENALTY {
+            doc.set_hyphen_penalty(hyphen_penalty);
+        }
+
         
         doc.layout(width, height, font_size, CURRENT_DEVICE.dpi);
         let pages_count = doc.pages_count();
