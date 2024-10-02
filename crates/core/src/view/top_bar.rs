@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::gesture::GestureEvent;
 use crate::input::DeviceEvent;
@@ -15,13 +17,23 @@ use crate::device::CURRENT_DEVICE;
 use crate::context::Context;
 use crate::battery::{Battery, Status};
 
+// Children names for lookup
+pub const MENU_ACTION: &str = "menu_action";
+pub const CLOCK: &str = "clock";
+pub const BATTERY: &str = "battery";
+pub const FRONTLIGHT: &str = "frontlight";
+pub const MENU: &str = "menu";
+pub const TITLE: &str = "title";
+pub const BORDER: &str = "border";
+
 #[derive(Debug, Clone)]
 pub struct TopBar {
     id: Id,
     rect: Rectangle,
     children: Vec<Box<dyn View>>,
     content_height: i32,
-    border_thickness: i32
+    border_thickness: i32,
+    children_lookup: HashMap<String, usize>
 }
 
 impl TopBar {
@@ -37,7 +49,8 @@ impl TopBar {
                 parent_rect.max.x, parent_rect.min.y + content_height + border_thickness],
             children: Vec::new(),
             content_height,
-            border_thickness
+            border_thickness,
+            children_lookup: HashMap::new()
         }
     }
     pub fn new(parent_rect: Rectangle, root_event: Event, title: String,
@@ -69,6 +82,7 @@ impl TopBar {
         let root_icon = Icon::new(icon_name,
                                   rect![self.rect.min, self.rect.min + self.content_height],
                                   root_event);
+        self.children_lookup.insert(MENU_ACTION.to_string(), self.children.len());
         self.children.push(Box::new(root_icon) as Box<dyn View>);
     }
 
@@ -77,6 +91,8 @@ impl TopBar {
             self.rect.max.x - (self.content_height * 4), self.rect.min.y,
             self.rect.max.x - (self.content_height * 3), self.rect.min.y + self.content_height];
         let clock_label = Clock::new(&mut clock_rect, format, fonts);
+
+        self.children_lookup.insert(CLOCK.to_string(), self.children.len());
         self.children.push(Box::new(clock_label) as Box<dyn View>);
     }
 
@@ -87,6 +103,8 @@ impl TopBar {
             self.rect.max.x - (self.content_height * 3), self.rect.min.y,
             self.rect.max.x - (self.content_height * 2), self.rect.min.y + self.content_height];
         let battery_widget = BatteryWidget::new(battery_rect, capacity, status);
+
+        self.children_lookup.insert(BATTERY.to_string(), self.children.len());
         self.children.push(Box::new(battery_widget) as Box<dyn View>);
     }
 
@@ -97,6 +115,8 @@ impl TopBar {
             self.rect.max.x - (self.content_height), self.rect.min.y + self.content_height];
         let frontlight_icon = Icon::new(name, frontlight_rect,
                                         Event::Show(ViewId::Frontlight));
+
+        self.children_lookup.insert(FRONTLIGHT.to_string(), self.children.len());
         self.children.push(Box::new(frontlight_icon) as Box<dyn View>);
     }
 
@@ -107,6 +127,8 @@ impl TopBar {
         let menu_icon = Icon::new("menu",
                                   menu_rect,
                                   Event::ToggleNear(ViewId::MainMenu, menu_rect));
+
+        self.children_lookup.insert(MENU.to_string(), self.children.len());
         self.children.push(Box::new(menu_icon) as Box<dyn View>);
     }
 
@@ -119,6 +141,8 @@ impl TopBar {
             self.rect.max.x - used_width, self.rect.min.y + self.content_height];
         let title_label = Label::new(title_rect, title, Align::Center)
                                 .event(Some(Event::ToggleNear(ViewId::TitleMenu, title_rect)));
+
+        self.children_lookup.insert(TITLE.to_string(), self.children.len());
         self.children.push(Box::new(title_label) as Box<dyn View>);
     }
 
@@ -127,39 +151,70 @@ impl TopBar {
             self.rect.min.x, self.rect.max.y - self.border_thickness,
             self.rect.max.x, self.rect.max.y];
         let separator = Filler::new(border_rect, BLACK);
+
+        self.children_lookup.insert(BORDER.to_string(), self.children.len());
         self.children.push(Box::new(separator) as Box<dyn View>);
     }
 
 
     pub fn update_root_icon(&mut self, name: &str, rq: &mut RenderQueue) {
-        let icon = self.child_mut(0).downcast_mut::<Icon>().unwrap();
-        if icon.name != name {
-            icon.name = name.to_string();
-            rq.add(RenderData::new(icon.id(), *icon.rect(), UpdateMode::Gui));
+        match self.children_lookup.get(MENU_ACTION) {
+            Some(index) => {
+                let icon = self.child_mut(*index).downcast_mut::<Icon>().unwrap();
+                if icon.name != name {
+                    icon.name = name.to_string();
+                    rq.add(RenderData::new(icon.id(), *icon.rect(), UpdateMode::Gui));
+                }
+            },
+            None => ()
         }
     }
 
     pub fn update_title_label(&mut self, title: &str, rq: &mut RenderQueue) {
-        let title_label = self.children[1].as_mut().downcast_mut::<Label>().unwrap();
-        title_label.update(title, rq);
+        match self.children_lookup.get(TITLE) {
+            Some(index) => {
+                let title_label = self.children[*index].as_mut().downcast_mut::<Label>().unwrap();
+                title_label.update(title, rq);
+            },
+            None => ()
+        }
     }
 
     pub fn update_frontlight_icon(&mut self, rq: &mut RenderQueue, context: &mut Context) {
-        let name = if context.settings.frontlight { "frontlight" } else { "frontlight-disabled" };
-        let icon = self.child_mut(4).downcast_mut::<Icon>().unwrap();
-        icon.name = name.to_string();
-        rq.add(RenderData::new(icon.id(), *icon.rect(), UpdateMode::Gui));
+        self.context_free_update_frontlight_icon(rq, context.settings.frontlight);
+    }
+
+    pub fn context_free_update_frontlight_icon(&mut self, rq: &mut RenderQueue, frontlight: bool) {
+        match self.children_lookup.get(FRONTLIGHT) {
+            Some(index) => {
+                let name = if frontlight { "frontlight" } else { "frontlight-disabled" };
+                let icon = self.child_mut(*index).downcast_mut::<Icon>().unwrap();
+                icon.name = name.to_string();
+                rq.add(RenderData::new(icon.id(), *icon.rect(), UpdateMode::Gui));
+            },
+            None => ()
+        }
     }
 
     pub fn update_clock_label(&mut self, rq: &mut RenderQueue) {
-        if let Some(clock_label) = self.children[2].downcast_mut::<Clock>() {
-            clock_label.update(rq);
+        match self.children_lookup.get(CLOCK) {
+            Some(index) => {
+                if let Some(clock_label) = self.children[*index].downcast_mut::<Clock>() {
+                    clock_label.update(rq);
+                }
+            },
+            None => ()
         }
     }
 
     pub fn update_battery_widget(&mut self, rq: &mut RenderQueue, context: &mut Context) {
-        if let Some(battery_widget) = self.children[3].downcast_mut::<BatteryWidget>() {
-            battery_widget.update(rq, context);
+        match self.children_lookup.get(BATTERY) {
+            Some(index) => {
+                if let Some(battery_widget) = self.children[*index].downcast_mut::<BatteryWidget>() {
+                    battery_widget.update(rq, context);
+                }
+            },
+            None => ()
         }
     }
 
@@ -394,5 +449,56 @@ mod tests {
         assert_eq!(top_bar.children.len(), 1);
         assert_eq!(top_bar.children[0].rect(), &rect![0, content_height, width, content_height+border_thickness]);
         let _title = top_bar.child_mut(0).downcast_mut::<Filler>().unwrap();
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn WHEN_topbarNewIsCalled_THEN_aTopBarWithTheStandardChildrenIsCreated() {
+        // WHEN TopBar::new() is called
+        let mut battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
+        let top_bar = TopBar::new(rect![0, 0, 600, 800], Event::Back, "Test Title".to_string(),
+                                 "%H:%M".to_string(), &mut Fonts::load_with_prefix("../../").unwrap(),
+                                  &mut battery, true);
+        // THEN a top bar with the standard children is called
+        assert_eq!(top_bar.children_lookup, HashMap::from([
+            (MENU_ACTION.to_string(), 0usize),
+            (CLOCK.to_string(), 1usize),
+            (BATTERY.to_string(), 2usize),
+            (FRONTLIGHT.to_string(), 3usize),
+            (MENU.to_string(), 4usize),
+            (TITLE.to_string(), 5usize),
+            (BORDER.to_string(), 6usize)
+        ]));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_aStandardTopBar_WHEN_updateFrontlightIconIsCalled_THEN_noneOfTheChildrenAreChanged() {
+        // GIVEN a standard TopBar
+        let mut battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
+        let mut top_bar = TopBar::new(rect![0, 0, 600, 800], Event::Back, "Test Title".to_string(),
+                                 "%H:%M".to_string(), &mut Fonts::load_with_prefix("../../").unwrap(),
+                                  &mut battery, true);
+        let mut rq = RenderQueue::new();
+        // WHEN update_frontlight_icon is called
+        top_bar.context_free_update_frontlight_icon(&mut rq, true);
+        // THEN none of the children are changed
+        assert_eq!(top_bar.children_lookup, HashMap::from([
+            (MENU_ACTION.to_string(), 0usize),
+            (CLOCK.to_string(), 1usize),
+            (BATTERY.to_string(), 2usize),
+            (FRONTLIGHT.to_string(), 3usize),
+            (MENU.to_string(), 4usize),
+            (TITLE.to_string(), 5usize),
+            (BORDER.to_string(), 6usize)
+        ]));
+        let menu_action = top_bar.child_mut(0).downcast_mut::<Icon>().unwrap();
+        assert_eq!(menu_action.name, "back");
+        let _clock = top_bar.child_mut(1).downcast_mut::<Clock>().unwrap();
+        let _battery = top_bar.child_mut(2).downcast_mut::<BatteryWidget>().unwrap();
+        let frontlight = top_bar.child_mut(3).downcast_mut::<Icon>().unwrap();
+        assert_eq!(frontlight.name, "frontlight");
+        let menu = top_bar.child_mut(4).downcast_mut::<Icon>().unwrap();
+        assert_eq!(menu.name, "menu");
     }
 }
