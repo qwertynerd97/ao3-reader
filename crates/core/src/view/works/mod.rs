@@ -115,21 +115,21 @@ impl Works {
     }
 
     // NOTE: This function assumes that the workindex wasn't resized.
-    fn refresh_visibles(&mut self, update: bool, reset_page: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+    // fn refresh_visibles(&mut self, update: bool, reset_page: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
 
-        let workindex = self.child(self.shelf_index).downcast_ref::<WorkIndex>().unwrap();
+    //     let workindex = self.child(self.shelf_index).downcast_ref::<WorkIndex>().unwrap();
 
-        if reset_page  {
-            self.current_page = 0;
-        } else if self.current_page >= self.pages_count {
-            self.current_page = self.pages_count.saturating_sub(1);
-        }
+    //     if reset_page  {
+    //         self.current_page = 0;
+    //     } else if self.current_page >= self.pages_count {
+    //         self.current_page = self.pages_count.saturating_sub(1);
+    //     }
 
-        if update {
-            self.update_shelf(false, hub, rq, context);
-            self.update_bottom_bar(rq);
-        }
-    }
+    //     if update {
+    //         self.update_shelf(false, hub, rq, context);
+    //         self.update_bottom_bar(rq);
+    //     }
+    // }
 
     fn update_thumbnail_previews(&mut self, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
         let selected_library = context.settings.selected_library;
