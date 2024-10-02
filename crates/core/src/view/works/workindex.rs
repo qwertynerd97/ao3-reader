@@ -60,7 +60,10 @@ pub fn fetch_index(url: &Url, context: &Context) -> (IndexPage, usize, Option<us
     let max_works_data = scrape(&data, "h2.heading");
     let title = scrape(&data, "h2.heading a.tag");
     let max_page_data = scrape_many(&data, ".pagination li a");
-    let max_page_text = &max_page_data[max_page_data.len() - 2];
+    let mut max_page_text = "1";
+    if max_page_data.len() >= 2 {
+        max_page_text = &max_page_data[max_page_data.len() - 2];
+    }
     let max_page = str_to_usize(max_page_text.to_string());
 
     let max_works_re = Regex::new(r"\d+ - \d+ of ([,\d]+) Works").unwrap();
@@ -105,9 +108,10 @@ impl WorkIndex {
 
         let (index_data, internal_max, max_works, index_title) = fetch_index(&url, context);
         let title = match index_type {
-            IndexType::Works => index_title,
+            IndexType::TagWorks => index_title,
             IndexType::History(HistoryView::MarkedForLater) => "Marked For Later".to_string(),
             IndexType::History(HistoryView::Full) => "History".to_string(),
+            IndexType::Search(ref query) => format!("Search: {}", query)
         };
         // If we have a known number of max works, we can know exactly how many
         // display pages we have. If not, we have to guess off the max number of pages

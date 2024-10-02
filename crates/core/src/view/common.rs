@@ -259,7 +259,7 @@ pub fn toggle_input_history_menu(view: &mut dyn View, id: ViewId, rect: Rectangl
                                            .collect::<Vec<EntryKind>>());
         if let Some(entries) = entries {
             let menu_kind = match id {
-                ViewId::HomeSearchInput |
+                ViewId::SiteTextSearchInput |
                 ViewId::ReaderSearchInput |
                 ViewId::DictionarySearchInput |
                 ViewId::CalculatorInput => MenuKind::DropDown,

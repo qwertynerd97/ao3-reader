@@ -16,6 +16,8 @@ use crate::view::filler::Filler;
 use crate::view::keyboard::Keyboard;
 use crate::view::named_input::NamedInput;
 use crate::view::menu::Menu;
+use crate::view::notification::Notification;
+use crate::view::search_bar::SearchBar;
 use super::top_bar::TopBar;
 use self::workindex::WorkIndex;
 use self::bottom_bar::BottomBar;
@@ -37,8 +39,9 @@ pub enum HistoryView {
 
 #[derive(Debug, Clone)]
 pub enum IndexType {
-    Works,
-    History(HistoryView)
+    TagWorks,
+    History(HistoryView),
+    Search(String),
 }
 
 
@@ -52,7 +55,8 @@ pub struct Works {
     works_count: Option<usize>,
     works_lines: usize,
     shelf_index: usize,
-    focus: Option<ViewId>
+    focus: Option<ViewId>,
+    query: Option<String>,
 }
 
 impl Works {
@@ -65,9 +69,6 @@ impl Works {
         let (_small_thickness, big_thickness) = halves(thickness);
         let (small_height, _big_height) = (scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32,
                                           scale_by_dpi(BIG_BAR_HEIGHT, dpi) as i32);
-
-        let shelf_index = 1;
-
         let top_bar = TopBar::new(rect![rect.min.x, rect.min.y,
                                         rect.max.x, rect.min.y + small_height + big_thickness],
                                   Event::Toggle(ViewId::SearchBar),
@@ -94,6 +95,8 @@ impl Works {
 
         children.push(Box::new(workindex) as Box<dyn View>);
 
+        let shelf_index = children.len() - 1;
+
         rq.add(RenderData::new(id, rect, UpdateMode::Full));
 
         Ok(Works {
@@ -105,16 +108,14 @@ impl Works {
             shelf_index,
             focus: None,
             works_count,
-            works_lines
+            works_lines,
+            // index_type,
+            query: None
         })
     }
 
-    // // NOTE: This function assumes that the workindex wasn't resized.
+    // NOTE: This function assumes that the workindex wasn't resized.
     // fn refresh_visibles(&mut self, update: bool, reset_page: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-    //     let (files, _) = context.library.list(&self.current_directory,
-    //                                           self.query.as_ref(),
-    //                                           false);
-    //     self.visible_books = files;
 
     //     let workindex = self.child(self.shelf_index).downcast_ref::<WorkIndex>().unwrap();
 
@@ -301,6 +302,96 @@ impl Works {
     //     Ok(())
     // }
 
+    fn toggle_search_bar(&mut self, enable: Option<bool>, update: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+        let dpi = CURRENT_DEVICE.dpi;
+        let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
+        let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
+        let delta_y = small_height;
+        let search_visible: bool;
+        let mut has_keyboard = false;
+
+        if let Some(index) = rlocate::<SearchBar>(self) {
+            if let Some(true) = enable {
+                return;
+            }
+
+            if let Some(ViewId::SiteTextSearchInput) = self.focus {
+                self.toggle_keyboard(false, false, Some(ViewId::SiteTextSearchInput), hub, rq, context);
+            }
+
+            // Remove the search bar and its separator.
+            self.children.drain(index - 1 ..= index);
+
+            // Move the shelf's bottom edge.
+            self.children[self.shelf_index].rect_mut().max.y += delta_y;
+
+            self.query = None;
+            search_visible = false;
+        } else {
+            if let Some(false) = enable {
+                return;
+            }
+
+            let search_bar = SearchBar::new(rect![self.rect.min.x, self.rect.max.y - delta_y - thickness,
+                                                  self.rect.max.x,
+                                                  self.rect.max.y],
+                                            ViewId::SiteTextSearchInput,
+                                            "Title, author, series",
+                                            "", context);
+            self.children.insert(self.shelf_index+1, Box::new(search_bar) as Box<dyn View>);
+
+            let separator = Filler::new(rect![self.rect.min.x, self.rect.max.y - delta_y,
+                self.rect.max.x,
+                self.rect.max.y], BLACK);
+            self.children.insert(self.shelf_index+1, Box::new(separator) as Box<dyn View>);
+
+            // Move the shelf's bottom edge.
+            self.children[self.shelf_index].rect_mut().max.y -= delta_y;
+
+            if self.query.is_none() {
+                if rlocate::<Keyboard>(self).is_none() {
+                    self.toggle_keyboard(true, false, Some(ViewId::SiteTextSearchInput), hub, rq, context);
+                    has_keyboard = true;
+                }
+
+                hub.send(Event::Focus(Some(ViewId::SiteTextSearchInput))).ok();
+            }
+
+            search_visible = true;
+        }
+
+        if update {
+            if !search_visible {
+                rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
+            }
+
+
+            if search_visible {
+                rq.add(RenderData::new(self.child(self.shelf_index-1).id(), *self.child(self.shelf_index-1).rect(), UpdateMode::Partial));
+                let mut rect = *self.child(self.shelf_index).rect();
+                rect.max.y = self.child(self.shelf_index+1).rect().min.y;
+                // Render the part of the shelf that isn't covered.
+                self.update_shelf(true, hub, &mut RenderQueue::new(), context);
+                rq.add(RenderData::new(self.child(self.shelf_index).id(), rect, UpdateMode::Partial));
+                // Render the views on top of the shelf.
+                rect.min.y = rect.max.y;
+                let end_index = self.shelf_index + if has_keyboard { 3 } else { 1 };
+                rect.max.y = self.child(end_index).rect().max.y;
+                rq.add(RenderData::expose(rect, UpdateMode::Partial));
+            } else {
+                for i in self.shelf_index - 1 ..= self.shelf_index {
+                    if i == self.shelf_index {
+                        self.update_shelf(true, hub, rq, context);
+                        continue;
+                    }
+                    rq.add(RenderData::new(self.child(i).id(), *self.child(i).rect(), UpdateMode::Partial));
+                }
+            }
+
+            // self.update_bottom_bar(rq);
+        }
+    }
+
 
     fn flush(&mut self, context: &mut Context) {
         context.library.flush();
@@ -347,6 +438,10 @@ impl View for Works {
                 self.toggle_keyboard(true, true, None, hub, rq, context);
                 true
             },
+            Event::Toggle(ViewId::SearchBar) => {
+                self.toggle_search_bar(None, true, hub, rq, context);
+                true
+            },
             Event::Toggle(ViewId::GoToPage) => {
                 self.toggle_go_to_page(None, hub, rq, context);
                 true
@@ -361,6 +456,10 @@ impl View for Works {
             },
             Event::ToggleNear(ViewId::ClockMenu, rect) => {
                 toggle_clock_menu(self, rect, None, rq, context);
+                true
+            },
+            Event::ToggleNear(ViewId::SearchMenu, _rect) => {
+                hub.send(Event::SubmitInput(ViewId::SiteTextSearchInput)).ok();
                 true
             },
             Event::Close(ViewId::MainMenu) => {
@@ -395,6 +494,24 @@ impl View for Works {
                 }
                 true
             },
+            Event::Close(ViewId::SearchBar) => {
+                self.toggle_search_bar(Some(false), true, hub, rq, context);
+                true
+            },
+            Event::Submit(ViewId::SiteTextSearchInput, ref text) => {
+                self.query = Some(text.to_string());
+                if self.query.is_some() {
+                    self.toggle_keyboard(false, false, None, hub, rq, context);
+                    self.toggle_search_bar(Some(false), false, hub, rq, context);
+                    rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
+                    hub.send(Event::LoadSearch(text.to_string())).ok();
+                } else {
+                    let notif = Notification::new("Invalid search query.".to_string(),
+                                                  hub, rq, context);
+                    self.children.push(Box::new(notif) as Box<dyn View>);
+                }
+                true
+            },
             Event::GoToTag(ref loc) => {
 
                 let shelf_index = self.shelf_index.clone();
@@ -406,7 +523,7 @@ impl View for Works {
                             loc.clone(),
                             hub,
                             context,
-                        IndexType::Works);
+                        IndexType::TagWorks);
 
 
                 let current_page = workindex.current_page;
