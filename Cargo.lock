@@ -60,7 +60,7 @@ checksum = "f538837af36e6f6a9be0faa67f9a314f8119e4e4b5867c6ab40ed60360142519"
 
 [[package]]
 name = "ao3reader"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ao3reader-core",
  "reqwest",
@@ -506,7 +506,7 @@ checksum = "3a68a4904193147e0a8dec3314640e6db742afd5f6e634f428a6af230d9b3591"
 
 [[package]]
 name = "emulator"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ao3reader-core",
  "reqwest",
