@@ -1,23 +1,33 @@
+use std::collections::HashMap;
+
 use url::Url;
-use crate::font::{Fonts, BOLD_STYLE};
-use crate::view::{View, Event, Hub, Bus, RenderQueue, Align, ViewId, Id, ID_FEEDER, RenderData};
-use crate::view::{MINI_BAR_HEIGHT, THICKNESS_MEDIUM, SMALL_PADDING, SMALL_BAR_HEIGHT, BIG_BAR_HEIGHT};
+use crate::font::Fonts;
+use crate::view::{View, Event, Hub, Bus, RenderQueue, ViewId, Id, ID_FEEDER, RenderData};
+use crate::view::{THICKNESS_MEDIUM, SMALL_BAR_HEIGHT, BIG_BAR_HEIGHT};
 use crate::context::Context;
 use crate::unit::scale_by_dpi;
 use crate::geom::{halves, Rectangle};
 use crate::color::{BLACK, WHITE};
 use crate::device::CURRENT_DEVICE;
-use crate::framebuffer::{Framebuffer, UpdateMode};
-use crate::view::textlabel::TextLabel;
+use crate::framebuffer::UpdateMode;
 use crate::view::filler::Filler;
-use crate::font::LABEL_STYLE;
 use crate::view::common::{locate, toggle_main_menu, toggle_battery_menu, toggle_clock_menu, rlocate};
 use super::top_bar::TopBar;
 use super::bottom_bar::BottomBar;
 use crate::view::keyboard::Keyboard;
 use crate::view::search_bar::SearchBar;
 use crate::view::notification::Notification;
+use crate::view::fave::Fave;
 use crate::battery::Battery;
+
+// Children names for lookup
+pub const BACKGROUND: &str = "background";
+pub const TOP_BAR: &str = "top_bar";
+pub const MARKED_FOR_LATER: &str = "marked_for_later";
+pub const FAVES: &str = "faves";
+pub const SEARCH_BAR: &str = "bottom_bar";
+pub const KEYBOARD: &str = "bottom_bar";
+pub const BOTTOM_BAR: &str = "bottom_bar";
 
 #[derive(Clone)]
 pub struct Home {
@@ -27,7 +37,8 @@ pub struct Home {
     view_id: ViewId,
     shelf_index: usize,
     focus: Option<ViewId>,
-    query: Option<String>
+    query: Option<String>,
+    children_lookup: HashMap<String, usize>
 }
 
 impl Home {
@@ -43,59 +54,55 @@ impl Home {
             shelf_index: 0,
             query: None,
             focus: None,
+            children_lookup: HashMap::new()
         }
     }
 
 
-    pub fn new(rect: Rectangle, rq: &mut RenderQueue, context: &mut Context) -> Home {
+    pub fn new(rect: Rectangle, rq: &mut RenderQueue,
+               format: String, fonts: &mut Fonts, battery: &mut Box<dyn Battery>, frontlight: bool, logged_in: bool, faves: &Vec<(String, Url)>) -> Home {
         let mut home = Home::new_empty(rect);
-        let dpi = CURRENT_DEVICE.dpi;
 
         home.create_background();
 
-        let top_bar_index = home.children.len();
-        home.create_top_bar(
-            context.settings.time_format.clone(), &mut context.fonts, &mut context.battery, context.settings.frontlight);
-        let top_bar = &home.children[top_bar_index];
+        home.create_top_bar(format, fonts, battery, frontlight);
+        let top_bar = &home.children[*home.children_lookup.get(TOP_BAR).unwrap()];
 
         // TODO add login/logged in section
 
         let mut top_pos = top_bar.rect().height() as i32;
-        let label_content_height = scale_by_dpi(MINI_BAR_HEIGHT, dpi) as i32;
-        let label_seperator_thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
-        let label_padding = scale_by_dpi(SMALL_PADDING, dpi) as i32;
-        let row_height = label_content_height + label_seperator_thickness;
-
-
 
         // Link to 'Marked for Later' view
-        if context.client.logged_in {
-            home.create_marked_for_later(top_pos, label_content_height, label_padding, label_seperator_thickness);
-            top_pos = top_pos + row_height;
+        if logged_in {
+            home.create_marked_for_later(top_pos);
+            top_pos = home.children[home.children.len() - 1].rect().max.y;
         }
 
-        let faves = &context.settings.ao3.faves;
+        // TODO - make this actually the bottom bar after refactoring search to not be
+        // so heavily tied to indexes :(
+        let bottom_bar_top = home.rect().min.y;
         let mut fav_index = 0;
-        while top_pos + row_height <= home.rect.max.y && fav_index < faves.len() {
-            home.create_fav_search(faves[fav_index].clone(), top_pos, label_content_height, label_padding, label_seperator_thickness);
-            top_pos = top_pos + row_height;
+        while fav_index < faves.len() {
+            home.create_fav_search(faves[fav_index].clone(), fav_index, top_pos);
+            top_pos = home.children[home.children.len() - 1].rect().max.y;
+            let row_height = home.children[home.children.len() - 1].rect().height() as i32;
             fav_index = fav_index + 1;
+
+            // If the next fave would overlap wth the bottom bar, we should not create
+            // any more faves
+            if top_pos + row_height > bottom_bar_top { break };
         }
 
         home.set_shelf_index(home.children.len() - 1); 
         home.create_bottom_bar();
-
         rq.add(RenderData::new(home.id, rect, UpdateMode::Full));
         home
     }
 
     fn create_background(&mut self) {
         let bg = Filler::new(self.rect, WHITE);
+        self.children_lookup.insert(BACKGROUND.to_string(), self.children.len());
         self.children.push(Box::new(bg) as Box<dyn View>);
-    }
-
-    fn set_shelf_index(&mut self, index: usize) {
-        self.shelf_index = index;
     }
 
     fn create_top_bar(&mut self, format: String, fonts: &mut Fonts, battery: &mut Box<dyn Battery>, frontlight: bool) {
@@ -103,6 +110,7 @@ impl Home {
                                   Event::Toggle(ViewId::SearchBar),
                                   "Favorite Tags".to_string(),
                                   format, fonts, battery, frontlight);
+        self.children_lookup.insert(TOP_BAR.to_string(), self.children.len());
         self.children.push(Box::new(top_bar) as Box<dyn View>);
     }
 
@@ -113,51 +121,68 @@ impl Home {
         let (small_thickness, big_thickness) = halves(thickness);
 
         let separator = Filler::new(rect![self.rect.min.x, self.rect.max.y - small_height - small_thickness,
-            self.rect.max.x, self.rect.max.y - small_height + big_thickness],
-      BLACK);
+            self.rect.max.x, self.rect.max.y - small_height + big_thickness], BLACK);
         self.children.push(Box::new(separator) as Box<dyn View>);
         // TODO: should eventually actually allow flipping through pages, if there are more favorites than will fit on one page
         let bottom_bar = BottomBar::new(rect![self.rect.min.x, self.rect.max.y - small_height + big_thickness,
-            self.rect.max.x, self.rect.max.y],
-            0,
-            1);
+            self.rect.max.x, self.rect.max.y], 0, 1);
+        self.children_lookup.insert(BOTTOM_BAR.to_string(), self.children.len());
         self.children.push(Box::new(bottom_bar) as Box<dyn View>);
-
     }
 
-    fn create_marked_for_later(&mut self, top_pos: i32, label_content_height: i32, label_padding: i32, label_seperator_thickness: i32) {
-        let label_rect = rect![
-                self.rect.min.x, top_pos,
-                self.rect.max.x, top_pos + label_content_height];
-        let history = TextLabel::new(label_rect,
+    fn create_marked_for_later(&mut self, top_pos: i32) {
+        let marked_for_later = Fave::new(
+            self.rect, top_pos,
             "Marked For Later".to_string(),
-            Align::Left(label_padding), BOLD_STYLE, Event::LoadHistory(super::works::HistoryView::MarkedForLater));
-        self.children.push(Box::new(history) as Box<dyn View>);
+            Event::LoadHistory(super::works::HistoryView::MarkedForLater));
 
-        let seperator_rect = rect![
-            self.rect.min.x, top_pos + label_content_height,
-            self.rect.max.x, top_pos + label_content_height + label_seperator_thickness];
-        let seperator = Filler::new(seperator_rect, BLACK);
-        self.children.push(Box::new(seperator) as Box<dyn View>);
+        self.children_lookup.insert(MARKED_FOR_LATER.to_string(), self.children.len());
+        self.children.push(Box::new(marked_for_later) as Box<dyn View>);
     }
 
-    fn create_fav_search(&mut self, fave: (String, Url),
-                         top_pos: i32, label_content_height: i32, label_padding: i32, label_seperator_thickness: i32) {
-        // TODO - extract out to favs component
-        let label_rect = rect![
-            self.rect.min.x, top_pos,
-            self.rect.max.x, top_pos + label_content_height];
-        let chapter = TextLabel::new(label_rect,
+    fn create_fav_search(&mut self, fave: (String, Url), fav_index: usize, top_pos: i32) {
+        let fave = Fave::new(
+            self.rect, top_pos,
             (*fave.0).to_string(),
-            Align::Left(label_padding), LABEL_STYLE,
             Event::LoadIndex((fave.1).to_string()));
-        self.children.push(Box::new(chapter) as Box<dyn View>);
 
-        let seperator_rect = rect![
-            self.rect.min.x, top_pos + label_content_height,
-            self.rect.max.x, top_pos + label_content_height + label_seperator_thickness];
-        let seperator = Filler::new(seperator_rect, BLACK);
-        self.children.push(Box::new(seperator) as Box<dyn View>);
+        self.children_lookup.insert(format!("{}_{}",FAVES.to_string(),fav_index), self.children.len());
+        self.children.push(Box::new(fave) as Box<dyn View>);
+    }
+
+    fn set_shelf_index(&mut self, index: usize) {
+        self.shelf_index = index;
+    }
+
+    fn open_search_bar(&mut self, context: &mut Context) {
+        // TODO - remove when components determine own height
+        let dpi = CURRENT_DEVICE.dpi;
+        let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
+        let big_height = scale_by_dpi(BIG_BAR_HEIGHT, dpi) as i32;
+        let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
+        let (small_thickness, big_thickness) = halves(thickness);
+
+        // search bar should be bottom-aligned, but not cover the bottom bar
+        // So we need to know the top y pos of the bottom bar
+        let index = *self.children_lookup.get(BOTTOM_BAR).unwrap();
+        let bottom_bar = &self.children[index];
+
+        // space for keyboard - based on research Kobos do not support physical keyboards
+        // without extensive technical setup, so we should assume that we always need to
+        // display the keyboard when we display the search input
+        // TODO - figure out a less arbitrary min y for keyboard
+        let mut kb_rect = rect![self.rect.min.x, bottom_bar.rect().min.y - (small_height + 3 * big_height) as i32 + big_thickness,
+            self.rect.max.x, bottom_bar.rect().min.y];
+        let keyboard = Keyboard::new(&mut kb_rect, false, context);
+        self.children_lookup.insert(KEYBOARD.to_string(), self.children.len());
+        self.children.insert(index, Box::new(keyboard) as Box<dyn View>);
+
+        // TODO - add top border seperator to keyboard element instead of as seperate item
+        let separator = Filler::new(rect![self.rect.min.x, kb_rect.min.y - thickness,
+                                              self.rect.max.x, kb_rect.min.y], BLACK);
+        self.children.insert(index, Box::new(separator) as Box<dyn View>);
+
+        // space for search bar
     }
 
     fn toggle_search_bar(&mut self, enable: Option<bool>, update: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
@@ -304,6 +329,7 @@ impl Home {
 
             let delta_y = kb_rect.height() as i32 + thickness;
 
+            // Shift the search bar up above the keyboard :(
             if has_search_bar {
                 for i in self.shelf_index+1..=self.shelf_index+2 {
                     let shifted_rect = *self.child(i).rect() + pt!(0, -delta_y);
@@ -358,10 +384,6 @@ impl View for Home {
                 }
                 true
             },
-            Event::Toggle(ViewId::SearchBar) => {
-                self.toggle_search_bar(None, true, hub, rq, context);
-                true
-            },
             Event::ToggleNear(ViewId::MainMenu, rect) => {
                 toggle_main_menu(self, rect, None, rq, context);
                 true
@@ -376,6 +398,12 @@ impl View for Home {
             },
             Event::Close(ViewId::MainMenu) => {
                 toggle_main_menu(self, Rectangle::default(), Some(false), rq, context);
+                true
+            },
+
+            // Ao3 Text Search
+            Event::Toggle(ViewId::SearchBar) => {
+                self.toggle_search_bar(None, true, hub, rq, context);
                 true
             },
             Event::ToggleNear(ViewId::SearchMenu, _rect) => {
@@ -411,9 +439,6 @@ impl View for Home {
             },
             _ => false
         }
-    }
-
-    fn render(&self, _fb: &mut dyn Framebuffer, _rect: Rectangle, _fonts: &mut Fonts) {
     }
 
     fn rect(&self) -> &Rectangle {
@@ -477,14 +502,11 @@ mod tests {
     fn WHEN_createMarkedForLaterIsCalled_THEN_aMarkedForLaterLabelIsAddedToChildren() {
         // WHEN create_marked_for_later is called
         let mut home = Home::new_empty(rect![0, 0, 600, 800]);
-        home.create_marked_for_later(5, 67, 5, 1);
+        home.create_marked_for_later(5);
         // THEN a marked for later label is added to children
-        assert_eq!(home.children.len(), 2);
-        assert_eq!(home.children[0].rect(), &rect![0, 5, 600, 72]);
-        let label = home.child_mut(0).downcast_mut::<TextLabel>().unwrap();
-        assert_eq!(label.text, "Marked For Later");
-        assert_eq!(home.children[1].rect(), &rect![0, 72, 600, 73]);
-        let _test_type2 = home.child_mut(1).downcast_mut::<Filler>().unwrap();
+        assert_eq!(home.children.len(), 1);
+        assert_eq!(home.children[0].rect(), &rect![0, 5, 600, 62]);
+        let _label = home.child_mut(0).downcast_mut::<Fave>().unwrap();
     }
 
     #[test]
@@ -493,13 +515,29 @@ mod tests {
         // WHEN create_marked_for_later is called
         let mut home = Home::new_empty(rect![0, 0, 600, 800]);
         home.create_fav_search(("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL")),
-                               5, 67, 5, 1);
+                               0, 5);
         // THEN a marked for later label is added to children
-        assert_eq!(home.children.len(), 2);
-        assert_eq!(home.children[0].rect(), &rect![0, 5, 600, 72]);
-        let label = home.child_mut(0).downcast_mut::<TextLabel>().unwrap();
-        assert_eq!(label.text, "Test Fave");
-        assert_eq!(home.children[1].rect(), &rect![0, 72, 600, 73]);
-        let _test_type2 = home.child_mut(1).downcast_mut::<Filler>().unwrap();
+        assert_eq!(home.children.len(), 1);
+        assert_eq!(home.children[0].rect(), &rect![0, 5, 600, 62]);
+        let _label = home.child_mut(0).downcast_mut::<Fave>().unwrap();
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_loggedInUser_WHEN_homeNewIsCalled_THEN_aHomePageWithTheStandardChildrenPlusMarkedForLaterIsCreated() {
+        // WHEN Home::new() is called
+        let mut battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
+        let mut rq = RenderQueue::new();
+        let home = Home::new(rect![0, 0, 600, 800], &mut rq, "%H:%M".to_string(), &mut Fonts::load_with_prefix("../../").unwrap(),
+                                  &mut battery, true, true, &vec![("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL"))]);
+
+        // THEN a home with the standard children plus a marked for later fave is called
+        assert_eq!(home.children_lookup, HashMap::from([
+            (BACKGROUND.to_string(), 0usize),
+            (TOP_BAR.to_string(), 1usize),
+            (MARKED_FOR_LATER.to_string(), 2usize),
+            (format!("{}_{}", FAVES.to_string(), 0), 3usize),
+            (BOTTOM_BAR.to_string(), 5usize) // because it has not been extracted out yet
+        ]));
     }
 }
