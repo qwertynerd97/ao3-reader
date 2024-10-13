@@ -169,16 +169,18 @@ impl Home {
         let keyboard = Keyboard::new(&mut kb_rect, false, context);
         self.children.insert(index - 1, Box::new(keyboard) as Box<dyn View>);
 
+        let keyboard_pos = self.children[rlocate::<Keyboard>(self).unwrap()].rect().clone();
+
         // TODO - add top border seperator to keyboard element instead of as seperate item
         let separator = Filler::new(rect![
-            self.rect.min.x, kb_rect.min.y - thickness,
-            self.rect.max.x, kb_rect.min.y], BLACK);
+            self.rect.min.x, keyboard_pos.min.y - thickness,
+            self.rect.max.x, keyboard_pos.min.y], BLACK);
         self.children.insert(index - 1, Box::new(separator) as Box<dyn View>);
 
         // add search bar child
         let mut search_rect = rect![
-            self.rect.min.x, kb_rect.min.y - small_height,
-            self.rect.max.x, kb_rect.min.y];
+            self.rect.min.x, keyboard_pos.min.y - small_height,
+            self.rect.max.x, keyboard_pos.min.y];
         let search_bar = SearchBar::new(search_rect,
             ViewId::SiteTextSearchInput, "Search Ao3", "", context);
         self.children.insert(self.shelf_index+1, Box::new(search_bar) as Box<dyn View>);

@@ -230,6 +230,7 @@ impl Works {
                 _ => false,
             };
             let keyboard = Keyboard::new(&mut kb_rect, number, context);
+            keyboard.add_to_context(context);
             self.children.push(Box::new(keyboard) as Box<dyn View>);
 
             let separator = Filler::new(rect![self.rect.min.x, kb_rect.min.y - thickness,
