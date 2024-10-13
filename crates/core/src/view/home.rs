@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use url::Url;
 use crate::font::Fonts;
 use crate::view::{View, Event, Hub, Bus, RenderQueue, ViewId, Id, ID_FEEDER, RenderData};
@@ -37,8 +35,7 @@ pub struct Home {
     view_id: ViewId,
     shelf_index: usize,
     focus: Option<ViewId>,
-    query: Option<String>,
-    children_lookup: HashMap<String, usize>
+    query: Option<String>
 }
 
 impl Home {
@@ -53,8 +50,7 @@ impl Home {
             view_id: ViewId::Home,
             shelf_index: 0,
             query: None,
-            focus: None,
-            children_lookup: HashMap::new()
+            focus: None
         }
     }
 
@@ -66,7 +62,7 @@ impl Home {
         home.create_background();
 
         home.create_top_bar(format, fonts, battery, frontlight);
-        let top_bar = &home.children[*home.children_lookup.get(TOP_BAR).unwrap()];
+        let top_bar = &home.children[rlocate::<TopBar>(&home).unwrap()];
 
         // TODO add login/logged in section
 
@@ -83,7 +79,7 @@ impl Home {
         let bottom_bar_top = home.rect().min.y;
         let mut fav_index = 0;
         while fav_index < faves.len() {
-            home.create_fav_search(faves[fav_index].clone(), fav_index, top_pos);
+            home.create_fav_search(faves[fav_index].clone(), top_pos);
             top_pos = home.children[home.children.len() - 1].rect().max.y;
             let row_height = home.children[home.children.len() - 1].rect().height() as i32;
             fav_index = fav_index + 1;
@@ -101,7 +97,6 @@ impl Home {
 
     fn create_background(&mut self) {
         let bg = Filler::new(self.rect, WHITE);
-        self.children_lookup.insert(BACKGROUND.to_string(), self.children.len());
         self.children.push(Box::new(bg) as Box<dyn View>);
     }
 
@@ -110,7 +105,6 @@ impl Home {
                                   Event::Toggle(ViewId::SearchBar),
                                   "Favorite Tags".to_string(),
                                   format, fonts, battery, frontlight);
-        self.children_lookup.insert(TOP_BAR.to_string(), self.children.len());
         self.children.push(Box::new(top_bar) as Box<dyn View>);
     }
 
@@ -126,7 +120,6 @@ impl Home {
         // TODO: should eventually actually allow flipping through pages, if there are more favorites than will fit on one page
         let bottom_bar = BottomBar::new(rect![self.rect.min.x, self.rect.max.y - small_height + big_thickness,
             self.rect.max.x, self.rect.max.y], 0, 1);
-        self.children_lookup.insert(BOTTOM_BAR.to_string(), self.children.len());
         self.children.push(Box::new(bottom_bar) as Box<dyn View>);
     }
 
@@ -136,17 +129,15 @@ impl Home {
             "Marked For Later".to_string(),
             Event::LoadHistory(super::works::HistoryView::MarkedForLater));
 
-        self.children_lookup.insert(MARKED_FOR_LATER.to_string(), self.children.len());
         self.children.push(Box::new(marked_for_later) as Box<dyn View>);
     }
 
-    fn create_fav_search(&mut self, fave: (String, Url), fav_index: usize, top_pos: i32) {
+    fn create_fav_search(&mut self, fave: (String, Url), top_pos: i32) {
         let fave = Fave::new(
             self.rect, top_pos,
             (*fave.0).to_string(),
             Event::LoadIndex((fave.1).to_string()));
 
-        self.children_lookup.insert(format!("{}_{}",FAVES.to_string(),fav_index), self.children.len());
         self.children.push(Box::new(fave) as Box<dyn View>);
     }
 
@@ -161,28 +152,42 @@ impl Home {
         let big_height = scale_by_dpi(BIG_BAR_HEIGHT, dpi) as i32;
         let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
         let (small_thickness, big_thickness) = halves(thickness);
+        let delta_y = small_height;
 
         // search bar should be bottom-aligned, but not cover the bottom bar
         // So we need to know the top y pos of the bottom bar
-        let index = *self.children_lookup.get(BOTTOM_BAR).unwrap();
+        let index = rlocate::<BottomBar>(self).unwrap();
         let bottom_bar = &self.children[index];
 
-        // space for keyboard - based on research Kobos do not support physical keyboards
+        // add keyboard child - based on research Kobos do not support physical keyboards
         // without extensive technical setup, so we should assume that we always need to
         // display the keyboard when we display the search input
-        // TODO - figure out a less arbitrary min y for keyboard
-        let mut kb_rect = rect![self.rect.min.x, bottom_bar.rect().min.y - (small_height + 3 * big_height) as i32 + big_thickness,
+        let mut kb_rect = rect![
+            // TODO - figure out a less arbitrary min y for keyboard
+            self.rect.min.x, bottom_bar.rect().min.y - (small_height + 3 * big_height) as i32 + big_thickness,
             self.rect.max.x, bottom_bar.rect().min.y];
         let keyboard = Keyboard::new(&mut kb_rect, false, context);
-        self.children_lookup.insert(KEYBOARD.to_string(), self.children.len());
-        self.children.insert(index, Box::new(keyboard) as Box<dyn View>);
+        self.children.insert(index - 1, Box::new(keyboard) as Box<dyn View>);
 
         // TODO - add top border seperator to keyboard element instead of as seperate item
-        let separator = Filler::new(rect![self.rect.min.x, kb_rect.min.y - thickness,
-                                              self.rect.max.x, kb_rect.min.y], BLACK);
-        self.children.insert(index, Box::new(separator) as Box<dyn View>);
+        let separator = Filler::new(rect![
+            self.rect.min.x, kb_rect.min.y - thickness,
+            self.rect.max.x, kb_rect.min.y], BLACK);
+        self.children.insert(index - 1, Box::new(separator) as Box<dyn View>);
 
-        // space for search bar
+        // add search bar child
+        let mut search_rect = rect![
+            self.rect.min.x, kb_rect.min.y - small_height,
+            self.rect.max.x, kb_rect.min.y];
+        let search_bar = SearchBar::new(search_rect,
+            ViewId::SiteTextSearchInput, "Search Ao3", "", context);
+        self.children.insert(self.shelf_index+1, Box::new(search_bar) as Box<dyn View>);
+
+        // TODO Move to Search Bar implementation
+        let separator = Filler::new(rect![
+            self.rect.min.x, search_rect.min.y - thickness,
+            self.rect.max.x, search_rect.min.y], BLACK);
+        self.children.insert(self.shelf_index+1, Box::new(separator) as Box<dyn View>);
     }
 
     fn toggle_search_bar(&mut self, enable: Option<bool>, update: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
@@ -215,27 +220,10 @@ impl Home {
                 return;
             }
 
-            let sp_rect = *self.child(self.shelf_index+1).rect() - pt!(0, delta_y);
-            let search_bar = SearchBar::new(rect![self.rect.min.x, sp_rect.max.y,
-                                                  self.rect.max.x,
-                                                  sp_rect.max.y + delta_y - thickness],
-                                            ViewId::SiteTextSearchInput,
-                                            "Search Ao3",
-                                            "", context);
-            self.children.insert(self.shelf_index+1, Box::new(search_bar) as Box<dyn View>);
-
-            let separator = Filler::new(sp_rect, BLACK);
-            self.children.insert(self.shelf_index+1, Box::new(separator) as Box<dyn View>);
-
-            // Move the shelf's bottom edge.
-            self.children[self.shelf_index].rect_mut().max.y -= delta_y;
+            self.open_search_bar(context);
+            has_keyboard = true;
 
             if self.query.is_none() {
-                if rlocate::<Keyboard>(self).is_none() {
-                    self.toggle_keyboard(true, false, Some(ViewId::SiteTextSearchInput), hub, rq, context);
-                    has_keyboard = true;
-                }
-
                 hub.send(Event::Focus(Some(ViewId::SiteTextSearchInput))).ok();
             }
 
@@ -312,30 +300,10 @@ impl Home {
                 return;
             }
 
-            let index = rlocate::<BottomBar>(self).unwrap() - 1;
-            let mut kb_rect = rect![self.rect.min.x,
-                                    self.rect.max.y - (small_height + 3 * big_height) as i32 + big_thickness,
-                                    self.rect.max.x,
-                                    self.rect.max.y - small_height - small_thickness];
-
-            let number = matches!(id, Some(ViewId::GoToPageInput));
-            let keyboard = Keyboard::new(&mut kb_rect, number, context);
-            self.children.insert(index, Box::new(keyboard) as Box<dyn View>);
-
-            let separator = Filler::new(rect![self.rect.min.x, kb_rect.min.y - thickness,
-                                              self.rect.max.x, kb_rect.min.y],
-                                        BLACK);
-            self.children.insert(index, Box::new(separator) as Box<dyn View>);
-
-            let delta_y = kb_rect.height() as i32 + thickness;
-
-            // Shift the search bar up above the keyboard :(
-            if has_search_bar {
-                for i in self.shelf_index+1..=self.shelf_index+2 {
-                    let shifted_rect = *self.child(i).rect() + pt!(0, -delta_y);
-                    self.child_mut(i).resize(shifted_rect, hub, rq, context);
-                }
-            }
+            // Technically this also adds the search bar in to children,
+            // but this is temporary until I can nuke these toggle functions
+            // so Iiiii thnk its fine actually
+            self.open_search_bar(context);
         }
 
         if update {
@@ -428,6 +396,13 @@ impl View for Home {
                 }
                 true
             },
+
+            // This does some sort of unintuitive cleanup with the keyboard :(
+            // The only parts of the code that send this are the toggle_search_bar
+            // and toggle_keyboard above, and the input field when it is tapped
+            // I suspect it is primarily designed to show/hide just the keyboard
+            // when the input field is focused, but we want to treat the search as
+            // a single modal, and show hide the keyboard and input simultaniously
             Event::Focus(v) => {
                 if self.focus != v {
                     self.focus = v;
@@ -514,8 +489,7 @@ mod tests {
     fn WHEN_createFaveSearchIsCalled_THEN_aFaveLabelIsAddedToChildren() {
         // WHEN create_marked_for_later is called
         let mut home = Home::new_empty(rect![0, 0, 600, 800]);
-        home.create_fav_search(("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL")),
-                               0, 5);
+        home.create_fav_search(("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL")), 5);
         // THEN a marked for later label is added to children
         assert_eq!(home.children.len(), 1);
         assert_eq!(home.children[0].rect(), &rect![0, 5, 600, 62]);
@@ -532,12 +506,10 @@ mod tests {
                                   &mut battery, true, true, &vec![("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL"))]);
 
         // THEN a home with the standard children plus a marked for later fave is called
-        assert_eq!(home.children_lookup, HashMap::from([
-            (BACKGROUND.to_string(), 0usize),
-            (TOP_BAR.to_string(), 1usize),
-            (MARKED_FOR_LATER.to_string(), 2usize),
-            (format!("{}_{}", FAVES.to_string(), 0), 3usize),
-            (BOTTOM_BAR.to_string(), 5usize) // because it has not been extracted out yet
-        ]));
+        assert_eq!(locate::<Filler>(&home).unwrap(), 0);
+        assert_eq!(locate::<TopBar>(&home).unwrap(), 1);
+        assert_eq!(locate::<Fave>(&home).unwrap(), 2); // marked for later
+        assert_eq!(rlocate::<Fave>(&home).unwrap(), 3); // test fave
+        assert_eq!(rlocate::<BottomBar>(&home).unwrap(), 5);
     }
 }
