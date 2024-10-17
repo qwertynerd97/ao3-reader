@@ -274,7 +274,7 @@ impl Dictionary {
             let number = id == Some(ViewId::GoToPageInput);
             let index = locate::<BottomBar>(self).unwrap() + 1;
 
-            let keyboard = Keyboard::new(&mut kb_rect, number, context);
+            let keyboard = Keyboard::new(&mut kb_rect, number, &context.keyboard_layouts, context.settings.keyboard_layout.clone());
             self.children.insert(index, Box::new(keyboard) as Box<dyn View>);
 
             let separator = Filler::new(rect![self.rect.min.x, kb_rect.min.y - thickness,

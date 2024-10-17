@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use fxhash::FxHashMap;
 use lazy_static::lazy_static;
 use serde::Deserialize;
@@ -95,12 +97,12 @@ impl Keyboard {
         }
     }
 
-    pub fn new(rect: &mut Rectangle, number: bool, context: &mut Context) -> Keyboard {
+    pub fn new(rect: &mut Rectangle, number: bool, keyboard_layouts: &BTreeMap<String, Layout>, keyboard_name: String) -> Keyboard {
         let mut keyboard = Keyboard::new_empty(rect);
 
         let dpi = CURRENT_DEVICE.dpi;
 
-        keyboard.layout = context.keyboard_layouts[&context.settings.keyboard_layout].clone();
+        keyboard.layout = keyboard_layouts[&keyboard_name].clone();
 
         if number {
             keyboard.state.alternate = 2;
@@ -300,7 +302,7 @@ impl View for Keyboard {
                     context.settings.keyboard_layout = name.to_string();
                     // FIXME: the keyboard's height might change, in which case,
                     // we shall notify the root view.
-                    *self = Keyboard::new(&mut self.rect, self.state.alternate == 2, context);
+                    *self = Keyboard::new(&mut self.rect, self.state.alternate == 2, &context.keyboard_layouts, name.to_string());
                     rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
                 }
                 true

@@ -166,7 +166,7 @@ impl Home {
             // TODO - figure out a less arbitrary min y for keyboard
             self.rect.min.x, bottom_bar.rect().min.y - (small_height + 3 * big_height) as i32 + big_thickness,
             self.rect.max.x, bottom_bar.rect().min.y];
-        let keyboard = Keyboard::new(&mut kb_rect, false, context);
+        let keyboard = Keyboard::new(&mut kb_rect, false, &context.keyboard_layouts, context.settings.keyboard_layout.clone());
         self.children.insert(index - 1, Box::new(keyboard) as Box<dyn View>);
 
         let keyboard_pos = self.children[rlocate::<Keyboard>(self).unwrap()].rect().clone();
