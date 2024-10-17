@@ -1,7 +1,10 @@
+use std::collections::BTreeMap;
+
 use url::Url;
 use crate::font::Fonts;
 use crate::view::{View, Event, Hub, Bus, RenderQueue, ViewId, Id, ID_FEEDER, RenderData};
 use crate::view::{THICKNESS_MEDIUM, SMALL_BAR_HEIGHT, BIG_BAR_HEIGHT};
+use crate::view::keyboard::Layout;
 use crate::context::Context;
 use crate::unit::scale_by_dpi;
 use crate::geom::{halves, Rectangle};
@@ -145,7 +148,7 @@ impl Home {
         self.shelf_index = index;
     }
 
-    fn open_search_bar(&mut self, context: &mut Context) {
+    fn open_search_bar(&mut self, keyboard_layouts: &BTreeMap<String, Layout>, keyboard_name: String) {
         // TODO - remove when components determine own height
         let dpi = CURRENT_DEVICE.dpi;
         let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
@@ -166,7 +169,7 @@ impl Home {
             // TODO - figure out a less arbitrary min y for keyboard
             self.rect.min.x, bottom_bar.rect().min.y - (small_height + 3 * big_height) as i32 + big_thickness,
             self.rect.max.x, bottom_bar.rect().min.y];
-        let keyboard = Keyboard::new(&mut kb_rect, false, &context.keyboard_layouts, context.settings.keyboard_layout.clone());
+        let keyboard = Keyboard::new(&mut kb_rect, false, keyboard_layouts, keyboard_name);
         self.children.insert(index - 1, Box::new(keyboard) as Box<dyn View>);
 
         let keyboard_pos = self.children[rlocate::<Keyboard>(self).unwrap()].rect().clone();
@@ -222,7 +225,7 @@ impl Home {
                 return;
             }
 
-            self.open_search_bar(context);
+            self.open_search_bar(&context.keyboard_layouts, context.settings.keyboard_layout.clone());
             has_keyboard = true;
 
             if self.query.is_none() {
@@ -305,7 +308,7 @@ impl Home {
             // Technically this also adds the search bar in to children,
             // but this is temporary until I can nuke these toggle functions
             // so Iiiii thnk its fine actually
-            self.open_search_bar(context);
+            self.open_search_bar(&context.keyboard_layouts, context.settings.keyboard_layout.clone());
         }
 
         if update {
@@ -513,5 +516,23 @@ mod tests {
         assert_eq!(locate::<Fave>(&home).unwrap(), 2); // marked for later
         assert_eq!(rlocate::<Fave>(&home).unwrap(), 3); // test fave
         assert_eq!(rlocate::<BottomBar>(&home).unwrap(), 5);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn WHEN_openSearchBarIsCalled_THEN_aSearchBarAndAKeyboardAreCreated() {
+        let mut battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
+        let mut rq = RenderQueue::new();
+        let mut home = Home::new(rect![0, 0, 600, 800], &mut rq, "%H:%M".to_string(), &mut Fonts::load_with_prefix("../../").unwrap(),
+                                  &mut battery, true, true, &vec![("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL"))]);
+        let mut keyboard_layouts = BTreeMap::new();
+        keyboard_layouts.insert("test_keyboard".to_string(), Layout::default());
+        // WHEN open_search_bar() is called
+        home.open_search_bar(&keyboard_layouts, "test_keyboard".to_string());
+        // THEN a search bar and keyboard are created
+        // Ignore all the normal children before the search bar
+        assert_eq!(locate::<SearchBar>(&home).unwrap(), 5);
+        assert_eq!(locate::<Keyboard>(&home).unwrap(), 7);
+        assert_eq!(rlocate::<BottomBar>(&home).unwrap(), 9);
     }
 }
