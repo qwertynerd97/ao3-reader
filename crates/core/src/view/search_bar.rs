@@ -20,7 +20,7 @@ pub struct SearchBar {
 }
 
 impl SearchBar {
-    pub fn new(rect: Rectangle, input_id: ViewId, placeholder: &str, text: &str, context: &mut Context) -> SearchBar {
+    pub fn new(rect: Rectangle, input_id: ViewId, placeholder: &str) -> SearchBar {
         let id = ID_FEEDER.next();
         let mut children = Vec::new();
         let dpi = CURRENT_DEVICE.dpi;
@@ -45,7 +45,6 @@ impl SearchBar {
                                                 pt!(rect.max.x - side - thickness, rect.max.y)],
                                           input_id)
                                      .border(false)
-                                     .text(text, context)
                                      .placeholder(placeholder);
 
         children.push(Box::new(input_field) as Box<dyn View>);

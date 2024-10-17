@@ -182,7 +182,7 @@ impl Home {
             self.rect.min.x, keyboard_pos.min.y - small_height,
             self.rect.max.x, keyboard_pos.min.y];
         let search_bar = SearchBar::new(search_rect,
-            ViewId::SiteTextSearchInput, "Search Ao3", "", context);
+            ViewId::SiteTextSearchInput, "Search Ao3");
         self.children.insert(self.shelf_index+1, Box::new(search_bar) as Box<dyn View>);
 
         // TODO Move to Search Bar implementation

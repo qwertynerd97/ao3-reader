@@ -336,9 +336,7 @@ impl Works {
             let search_bar = SearchBar::new(rect![self.rect.min.x, self.rect.max.y - delta_y - thickness,
                                                   self.rect.max.x,
                                                   self.rect.max.y],
-                                            ViewId::SiteTextSearchInput,
-                                            "Title, author, series",
-                                            "", context);
+                                            ViewId::SiteTextSearchInput, "Title, author, series");
             self.children.insert(self.shelf_index+1, Box::new(search_bar) as Box<dyn View>);
 
             let separator = Filler::new(rect![self.rect.min.x, self.rect.max.y - delta_y,
