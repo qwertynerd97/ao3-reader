@@ -148,7 +148,7 @@ impl Home {
         self.shelf_index = index;
     }
 
-    fn open_search_bar(&mut self, keyboard_layouts: &BTreeMap<String, Layout>, keyboard_name: String, hub: &Hub, rq: &mut RenderQueue) {
+    fn open_search_bar(&mut self, keyboard_layouts: &BTreeMap<String, Layout>, keyboard_name: String, rq: &mut RenderQueue) {
         // TODO - remove when components determine own height
         let dpi = CURRENT_DEVICE.dpi;
         let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
@@ -181,9 +181,6 @@ impl Home {
             ViewId::SiteTextSearchInput, "Search Ao3");
         self.children.insert(self.shelf_index+1, Box::new(search_bar) as Box<dyn View>);
 
-        // Focus the text input on the search bar
-        hub.send(Event::Focus(Some(ViewId::SiteTextSearchInput))).ok();
-
         // Update the GUI with the new children
         rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
     }
@@ -203,35 +200,6 @@ impl Home {
         rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
     }
 
-    fn toggle_search_bar(&mut self, enable: Option<bool>, _update: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        if let Some(_index) = rlocate::<SearchBar>(self) {
-            if let Some(true) = enable {
-                return;
-            }
-            self.close_search_bar(rq);
-        } else {
-            if let Some(false) = enable {
-                return;
-            }
-
-            self.open_search_bar(&context.keyboard_layouts, context.settings.keyboard_layout.clone(), hub, rq);
-        }
-    }
-
-    fn toggle_keyboard(&mut self, enable: bool, update: bool, _id: Option<ViewId>, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        let has_search_bar = self.children[self.shelf_index+2].is::<SearchBar>();
-
-        if let Some(index) = rlocate::<Keyboard>(self) {
-            if enable {
-                return;
-            }
-        } else {
-            if !enable {
-                return;
-            }
-        }
-    }
-
     fn reseed(&mut self, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
             if let Some(top_bar) = self.child_mut(1).downcast_mut::<TopBar>() {
                 top_bar.update_frontlight_icon(&mut RenderQueue::new(), context);
@@ -242,10 +210,48 @@ impl Home {
             rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
         }
 
+    fn handle_search_events(&mut self, evt: &Event, keyboard_layouts: &BTreeMap<String, Layout>, keyboard_name: String, rq: &mut RenderQueue, hub: &Hub) -> bool {
+        match *evt {
+            Event::Toggle(ViewId::SearchBar) => {
+                if let Some(_index) = rlocate::<SearchBar>(self) {
+                    self.close_search_bar(rq);
+                } else {
+                    self.open_search_bar(keyboard_layouts, keyboard_name, rq);
+                    // Focus the text input on the search bar
+                    hub.send(Event::Focus(Some(ViewId::SiteTextSearchInput))).ok();
+                }
+                true
+            },
+            Event::ToggleNear(ViewId::SearchMenu, _rect) => {
+                hub.send(Event::SubmitInput(ViewId::SiteTextSearchInput)).ok();
+                true
+            },
+            Event::Close(ViewId::SearchBar) => {
+                self.close_search_bar(rq);
+                true
+            },
+            Event::Submit(ViewId::SiteTextSearchInput, ref text) => {
+                self.close_search_bar(rq);
+                hub.send(Event::LoadSearch(text.to_string())).ok();
+                true
+            },
+            Event::Focus(v) => {
+                if self.focus != v {
+                    self.focus = v;
+                }
+                true
+            },
+            _ => false
+        }
+    }
 }
 
 impl View for Home {
     fn handle_event(&mut self, evt: &Event, hub: &Hub, _bus: &mut Bus, rq: &mut RenderQueue, context: &mut Context) -> bool {
+        if self.handle_search_events(evt, &context.keyboard_layouts, context.settings.keyboard_layout.clone(), rq, hub) {
+            return true;
+        }
+
         match *evt {
             Event::Reseed => {
                 self.reseed(hub, rq, context);
@@ -272,50 +278,6 @@ impl View for Home {
             },
             Event::Close(ViewId::MainMenu) => {
                 toggle_main_menu(self, Rectangle::default(), Some(false), rq, context);
-                true
-            },
-
-            // Ao3 Text Search
-            Event::Toggle(ViewId::SearchBar) => {
-                self.toggle_search_bar(None, true, hub, rq, context);
-                true
-            },
-            Event::ToggleNear(ViewId::SearchMenu, _rect) => {
-                hub.send(Event::SubmitInput(ViewId::SiteTextSearchInput)).ok();
-                true
-            },
-            Event::Close(ViewId::SearchBar) => {
-                self.toggle_search_bar(Some(false), true, hub, rq, context);
-                true
-            },
-            Event::Submit(ViewId::SiteTextSearchInput, ref text) => {
-                self.query = Some(text.to_string());
-                if self.query.is_some() {
-                    self.toggle_keyboard(false, false, None, hub, rq, context);
-                    self.toggle_search_bar(Some(false), false, hub, rq, context);
-                    rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
-                    hub.send(Event::LoadSearch(text.to_string())).ok();
-                } else {
-                    let notif = Notification::new("Invalid search query.".to_string(),
-                                                  hub, rq, context);
-                    self.children.push(Box::new(notif) as Box<dyn View>);
-                }
-                true
-            },
-
-            // This does some sort of unintuitive cleanup with the keyboard :(
-            // The only parts of the code that send this are the toggle_search_bar
-            // and toggle_keyboard above, and the input field when it is tapped
-            // I suspect it is primarily designed to show/hide just the keyboard
-            // when the input field is focused, but we want to treat the search as
-            // a single modal, and show hide the keyboard and input simultaniously
-            Event::Focus(v) => {
-                if self.focus != v {
-                    self.focus = v;
-                    if v.is_some() {
-                        self.toggle_keyboard(true, true, v, hub, rq, context);
-                    }
-                }
                 true
             },
             _ => false
@@ -350,6 +312,8 @@ impl View for Home {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::mpsc;
+
     use super::*;
     use crate::battery::FakeBattery;
 
@@ -429,11 +393,165 @@ mod tests {
         let mut keyboard_layouts = BTreeMap::new();
         keyboard_layouts.insert("test_keyboard".to_string(), Layout::default());
         // WHEN open_search_bar() is called
-        home.open_search_bar(&keyboard_layouts, "test_keyboard".to_string());
+        home.open_search_bar(&keyboard_layouts, "test_keyboard".to_string(), &mut rq);
         // THEN a search bar and keyboard are created
         // Ignore all the normal children before the search bar
-        assert_eq!(locate::<SearchBar>(&home).unwrap(), 5);
-        assert_eq!(locate::<Keyboard>(&home).unwrap(), 7);
-        assert_eq!(rlocate::<BottomBar>(&home).unwrap(), 9);
+        assert_eq!(locate::<SearchBar>(&home).unwrap(), 4);
+        assert_eq!(locate::<Keyboard>(&home).unwrap(), 5);
+        assert_eq!(rlocate::<BottomBar>(&home).unwrap(), 7);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_anOpenSearchBar_WHEN_closeSearchBarIsCalled_THEN_noSearchBarExists() {
+        // GIVEN an open search bar
+        let mut battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
+        let mut rq = RenderQueue::new();
+        let mut home = Home::new(rect![0, 0, 600, 800], &mut rq, "%H:%M".to_string(), &mut Fonts::load_with_prefix("../../").unwrap(),
+                                  &mut battery, true, true, &vec![("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL"))]);
+        let mut keyboard_layouts = BTreeMap::new();
+        keyboard_layouts.insert("test_keyboard".to_string(), Layout::default());
+        home.open_search_bar(&keyboard_layouts, "test_keyboard".to_string(), &mut rq);
+        // WHEN close_search_bar is called
+        home.close_search_bar(&mut rq);
+        // THEN no search bar exits
+        // Ignore all the normal children before the search bar
+        assert_eq!(locate::<SearchBar>(&home), None);
+        assert_eq!(locate::<Keyboard>(&home), None);
+        assert_eq!(rlocate::<BottomBar>(&home).unwrap(), 5);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn WHEN_handleSearchEventsIsCalledWithEventToggleSearchBar_THEN_aSearchBarAndAKeyboardAreCreated() {
+        let mut battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
+        let mut rq = RenderQueue::new();
+        let mut home = Home::new(rect![0, 0, 600, 800], &mut rq, "%H:%M".to_string(), &mut Fonts::load_with_prefix("../../").unwrap(),
+                                  &mut battery, true, true, &vec![("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL"))]);
+        let mut keyboard_layouts = BTreeMap::new();
+        keyboard_layouts.insert("test_keyboard".to_string(), Layout::default());
+        let (tx, _rx) = mpsc::channel();
+        // WHEN handle_search_events is called with Event::Toggle(ViewId::SearchBar)
+        home.handle_search_events(&Event::Toggle(ViewId::SearchBar), &keyboard_layouts, "test_keyboard".to_string(), &mut rq, &tx);
+        // THEN a search bar and keyboard are created
+        // Ignore all the normal children before the search bar
+        assert_eq!(locate::<SearchBar>(&home).unwrap(), 4);
+        assert_eq!(locate::<Keyboard>(&home).unwrap(), 5);
+        assert_eq!(rlocate::<BottomBar>(&home).unwrap(), 7);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_anOpenSearchBar_WHEN_handleSearchEventsIsCalledWithEventToggleSearchBar_THEN_noSearchBarExists() {
+        // GIVEN an open search bar
+        let mut battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
+        let mut rq = RenderQueue::new();
+        let mut home = Home::new(rect![0, 0, 600, 800], &mut rq, "%H:%M".to_string(), &mut Fonts::load_with_prefix("../../").unwrap(),
+                                  &mut battery, true, true, &vec![("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL"))]);
+        let mut keyboard_layouts = BTreeMap::new();
+        keyboard_layouts.insert("test_keyboard".to_string(), Layout::default());
+        home.open_search_bar(&keyboard_layouts, "test_keyboard".to_string(), &mut rq);
+        let (tx, _rx) = mpsc::channel();
+        // WHEN handle_search_events is called with Event::Toggle(ViewId::SearchBar)
+        home.handle_search_events(&Event::Toggle(ViewId::SearchBar), &keyboard_layouts, "test_keyboard".to_string(), &mut rq, &tx);
+        // THEN no search bar exits
+        // Ignore all the normal children before the search bar
+        assert_eq!(locate::<SearchBar>(&home), None);
+        assert_eq!(locate::<Keyboard>(&home), None);
+        assert_eq!(rlocate::<BottomBar>(&home).unwrap(), 5);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_anOpenSearchBar_WHEN_handleSearchEventsIsCalledWithEventCloseSearchBar_THEN_noSearchBarExists() {
+        // GIVEN an open search bar
+        let mut battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
+        let mut rq = RenderQueue::new();
+        let mut home = Home::new(rect![0, 0, 600, 800], &mut rq, "%H:%M".to_string(), &mut Fonts::load_with_prefix("../../").unwrap(),
+                                  &mut battery, true, true, &vec![("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL"))]);
+        let mut keyboard_layouts = BTreeMap::new();
+        keyboard_layouts.insert("test_keyboard".to_string(), Layout::default());
+        home.open_search_bar(&keyboard_layouts, "test_keyboard".to_string(), &mut rq);
+        let (tx, _rx) = mpsc::channel();
+        // WHEN handle_search_events is called with Event::Close(ViewId::SearchBar)
+        home.handle_search_events(&Event::Close(ViewId::SearchBar), &keyboard_layouts, "test_keyboard".to_string(), &mut rq, &tx);
+        // THEN no search bar exits
+        // Ignore all the normal children before the search bar
+        assert_eq!(locate::<SearchBar>(&home), None);
+        assert_eq!(locate::<Keyboard>(&home), None);
+        assert_eq!(rlocate::<BottomBar>(&home).unwrap(), 5);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_anOpenSearchBar_WHEN_handleSearchEventsIsCalledWithEventSubmitSiteTextSearchInput_THEN_noSearchBarExists_AND_anEventLoadSearchWasSent() {
+        // GIVEN an open search bar
+        let mut battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
+        let mut rq = RenderQueue::new();
+        let mut home = Home::new(rect![0, 0, 600, 800], &mut rq, "%H:%M".to_string(), &mut Fonts::load_with_prefix("../../").unwrap(),
+                                  &mut battery, true, true, &vec![("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL"))]);
+        let mut keyboard_layouts = BTreeMap::new();
+        keyboard_layouts.insert("test_keyboard".to_string(), Layout::default());
+        home.open_search_bar(&keyboard_layouts, "test_keyboard".to_string(), &mut rq);
+        let (tx, rx) = mpsc::channel();
+        // WHEN handle_search_events is called with Event::Submit(ViewId::SiteTextSearchInput)
+        home.handle_search_events(
+            &Event::Submit(ViewId::SiteTextSearchInput, "fake_search".to_string()),
+            &keyboard_layouts, "test_keyboard".to_string(), &mut rq, &tx);
+        // THEN no search bar exits
+        // Ignore all the normal children before the search bar
+        assert_eq!(locate::<SearchBar>(&home), None);
+        assert_eq!(locate::<Keyboard>(&home), None);
+        assert_eq!(rlocate::<BottomBar>(&home).unwrap(), 5);
+        // AND an Event::LoadSearch was sent
+        match rx.recv() {
+            Ok(Event::LoadSearch(search_text)) => assert_eq!(search_text, "fake_search".to_string()),
+            Ok(event) => panic!("Recieved {event:?} but expected Event::LoadSearch"),
+            _ => panic!("Did not recieve any event")
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_anOpenSearchBar_WHEN_handleSearchEventsIsCalledWithEventSubmitSiteTextSearchInput_THEN_anEventSubmitInputWasSent() {
+        // GIVEN an open search bar
+        let mut battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
+        let mut rq = RenderQueue::new();
+        let mut home = Home::new(rect![0, 0, 600, 800], &mut rq, "%H:%M".to_string(), &mut Fonts::load_with_prefix("../../").unwrap(),
+                                  &mut battery, true, true, &vec![("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL"))]);
+        let mut keyboard_layouts = BTreeMap::new();
+        keyboard_layouts.insert("test_keyboard".to_string(), Layout::default());
+        home.open_search_bar(&keyboard_layouts, "test_keyboard".to_string(), &mut rq);
+        let (tx, rx) = mpsc::channel();
+        // WHEN handle_search_events is called with Event::ToggleNear(ViewId::SearchMenu)
+        home.handle_search_events(
+            &Event::ToggleNear(ViewId::SearchMenu, rect![0,0,1,1]),
+            &keyboard_layouts, "test_keyboard".to_string(), &mut rq, &tx);
+        // THEN an Event::SubmitInput(ViewId::SiteTextSearchInput) was sent
+        match rx.recv() {
+            Ok(Event::SubmitInput(view_id)) => assert_eq!(view_id, ViewId::SiteTextSearchInput),
+            Ok(event) => panic!("Recieved {event:?} but expected Event::ToggleNear"),
+            _ => panic!("Did not recieve any event")
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn GIVEN_anOpenSearchBar_WHEN_handleSearchEventsIsCalledWithEventFocus_THEN_focusWillBeOnThatView() {
+        // GIVEN an open search bar
+        let mut battery = Box::new(FakeBattery::new()) as Box<dyn Battery>;
+        let mut rq = RenderQueue::new();
+        let mut home = Home::new(rect![0, 0, 600, 800], &mut rq, "%H:%M".to_string(), &mut Fonts::load_with_prefix("../../").unwrap(),
+                                  &mut battery, true, true, &vec![("Test Fave".to_string(), Url::parse("https://fakeo3.org/tags/super-fake").expect("Test URL"))]);
+        let mut keyboard_layouts = BTreeMap::new();
+        keyboard_layouts.insert("test_keyboard".to_string(), Layout::default());
+        home.open_search_bar(&keyboard_layouts, "test_keyboard".to_string(), &mut rq);
+        let (tx, _rx) = mpsc::channel();
+        // WHEN handle_search_events is called with Event::Focus(ViewId::SearchMenu)
+        home.handle_search_events(
+            &Event::Focus(Some(ViewId::SearchMenu)),
+            &keyboard_layouts, "test_keyboard".to_string(), &mut rq, &tx);
+        // THEN focus will be on that view
+        assert_eq!(home.focus, Some(ViewId::SearchMenu));
     }
 }
