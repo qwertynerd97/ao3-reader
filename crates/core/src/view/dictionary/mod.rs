@@ -104,6 +104,7 @@ impl Dictionary {
                                   context.settings.time_format.clone(), &mut context.fonts, &mut context.battery, context.settings.frontlight);
         children.push(Box::new(top_bar) as Box<dyn View>);
 
+        // Search is ~ small_height tall
         let search_bar = SearchBar::new(rect![rect.min.x, rect.min.y + small_height + big_thickness,
                                               rect.max.x, rect.min.y + 2 * small_height - small_thickness],
                                         ViewId::DictionarySearchInput, query);

@@ -333,6 +333,7 @@ impl Works {
                 return;
             }
 
+            // Search is ~ small_height tall
             let search_bar = SearchBar::new(rect![self.rect.min.x, self.rect.max.y - delta_y - thickness,
                                                   self.rect.max.x,
                                                   self.rect.max.y],

@@ -1566,6 +1566,7 @@ impl Reader {
                                 self.rect.max.x, self.rect.max.y - 2 * small_height + big_thickness];
             let y_min = sp_rect.max.y;
             let rect = rect![self.rect.min.x, y_min,
+                            // Search is ~ small_height tall
                              self.rect.max.x, y_min + small_height - thickness];
             let search_bar = SearchBar::new(rect, ViewId::ReaderSearchInput, "");
             self.children.insert(index, Box::new(search_bar) as Box<dyn View>);
@@ -1662,6 +1663,7 @@ impl Reader {
                     let search_bar = SearchBar::new(rect![self.rect.min.x,
                                                           self.rect.max.y - 2 * small_height + big_thickness,
                                                           self.rect.max.x,
+                                                            // Search is ~ small_height tall
                                                           self.rect.max.y - small_height - small_thickness],
                                                     ViewId::ReaderSearchInput, &s.query);
                     self.children.insert(index, Box::new(search_bar) as Box<dyn View>);

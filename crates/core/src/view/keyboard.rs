@@ -7,7 +7,7 @@ use crate::device::CURRENT_DEVICE;
 use crate::framebuffer::{Framebuffer, UpdateMode};
 use crate::gesture::GestureEvent;
 use crate::input::DeviceEvent;
-use super::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, KeyboardEvent, EntryId, TextKind};
+use super::{View, Event, Hub, Bus, Id, ID_FEEDER, RenderQueue, RenderData, KeyboardEvent, EntryId, TextKind, THICKNESS_MEDIUM};
 use super::key::{Key, KeyKind};
 use super::BIG_BAR_HEIGHT;
 use crate::color::KEYBOARD_BG;
@@ -15,6 +15,8 @@ use crate::font::Fonts;
 use crate::context::Context;
 use crate::geom::{Rectangle, LinearDir};
 use crate::unit::scale_by_dpi;
+use crate::view::filler::Filler;
+use crate::color::BLACK;
 
 const PADDING_RATIO: f32 = 0.06;
 
@@ -101,6 +103,7 @@ impl Keyboard {
         let mut keyboard = Keyboard::new_empty(rect);
 
         let dpi = CURRENT_DEVICE.dpi;
+        let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
 
         keyboard.layout = keyboard_layouts[&keyboard_name].clone();
 
@@ -161,6 +164,12 @@ impl Keyboard {
                 keyboard.children.push(Box::new(key) as Box<dyn View>);
             }
         }
+
+
+        let separator = Filler::new(rect![
+            keyboard.rect.min.x, keyboard.rect.min.y - thickness,
+            keyboard.rect.max.x, keyboard.rect.min.y], BLACK);
+        keyboard.children.push(Box::new(separator) as Box<dyn View>);
 
         keyboard
     }

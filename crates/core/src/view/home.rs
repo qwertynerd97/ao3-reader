@@ -148,14 +148,13 @@ impl Home {
         self.shelf_index = index;
     }
 
-    fn open_search_bar(&mut self, keyboard_layouts: &BTreeMap<String, Layout>, keyboard_name: String) {
+    fn open_search_bar(&mut self, keyboard_layouts: &BTreeMap<String, Layout>, keyboard_name: String, hub: &Hub, rq: &mut RenderQueue) {
         // TODO - remove when components determine own height
         let dpi = CURRENT_DEVICE.dpi;
         let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
         let big_height = scale_by_dpi(BIG_BAR_HEIGHT, dpi) as i32;
         let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
-        let (small_thickness, big_thickness) = halves(thickness);
-        let delta_y = small_height;
+        let (_small_thickness, big_thickness) = halves(thickness);
 
         // search bar should be bottom-aligned, but not cover the bottom bar
         // So we need to know the top y pos of the bottom bar
@@ -174,159 +173,61 @@ impl Home {
 
         let keyboard_pos = self.children[rlocate::<Keyboard>(self).unwrap()].rect().clone();
 
-        // TODO - add top border seperator to keyboard element instead of as seperate item
-        let separator = Filler::new(rect![
-            self.rect.min.x, keyboard_pos.min.y - thickness,
-            self.rect.max.x, keyboard_pos.min.y], BLACK);
-        self.children.insert(index - 1, Box::new(separator) as Box<dyn View>);
-
         // add search bar child
-        let mut search_rect = rect![
-            self.rect.min.x, keyboard_pos.min.y - small_height,
+        let search_rect = rect![
+            self.rect.min.x, self.rect.min.y,
             self.rect.max.x, keyboard_pos.min.y];
         let search_bar = SearchBar::new(search_rect,
             ViewId::SiteTextSearchInput, "Search Ao3");
         self.children.insert(self.shelf_index+1, Box::new(search_bar) as Box<dyn View>);
 
-        // TODO Move to Search Bar implementation
-        let separator = Filler::new(rect![
-            self.rect.min.x, search_rect.min.y - thickness,
-            self.rect.max.x, search_rect.min.y], BLACK);
-        self.children.insert(self.shelf_index+1, Box::new(separator) as Box<dyn View>);
+        // Focus the text input on the search bar
+        hub.send(Event::Focus(Some(ViewId::SiteTextSearchInput))).ok();
+
+        // Update the GUI with the new children
+        rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
     }
 
-    fn toggle_search_bar(&mut self, enable: Option<bool>, update: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        let dpi = CURRENT_DEVICE.dpi;
-        let small_height = scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32;
-        let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
-        let delta_y = small_height;
-        let search_visible: bool;
-        let mut has_keyboard = false;
-
+    fn close_search_bar(&mut self, rq: &mut RenderQueue) {
         if let Some(index) = rlocate::<SearchBar>(self) {
+            self.children.remove(index);
+        }
+
+        if let Some(index) = rlocate::<Keyboard>(self) {
+            self.children.remove(index);
+        }
+
+        self.query = None;
+
+        // Update the GUI with the removed children
+        rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
+    }
+
+    fn toggle_search_bar(&mut self, enable: Option<bool>, _update: bool, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
+        if let Some(_index) = rlocate::<SearchBar>(self) {
             if let Some(true) = enable {
                 return;
             }
-
-            if let Some(ViewId::SiteTextSearchInput) = self.focus {
-                self.toggle_keyboard(false, false, Some(ViewId::SiteTextSearchInput), hub, rq, context);
-            }
-
-            // Remove the search bar and its separator.
-            self.children.drain(index - 1 ..= index);
-
-            // Move the shelf's bottom edge.
-            self.children[self.shelf_index].rect_mut().max.y += delta_y;
-
-            self.query = None;
-            search_visible = false;
+            self.close_search_bar(rq);
         } else {
             if let Some(false) = enable {
                 return;
             }
 
-            self.open_search_bar(&context.keyboard_layouts, context.settings.keyboard_layout.clone());
-            has_keyboard = true;
-
-            if self.query.is_none() {
-                hub.send(Event::Focus(Some(ViewId::SiteTextSearchInput))).ok();
-            }
-
-            search_visible = true;
-        }
-
-        if update {
-            if !search_visible {
-                rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
-            }
-
-
-            if search_visible {
-                rq.add(RenderData::new(self.child(self.shelf_index-1).id(), *self.child(self.shelf_index-1).rect(), UpdateMode::Partial));
-                let mut rect = *self.child(self.shelf_index).rect();
-                rect.max.y = self.child(self.shelf_index+1).rect().min.y;
-                // Render the part of the shelf that isn't covered.
-                rq.add(RenderData::new(self.child(self.shelf_index).id(), rect, UpdateMode::Partial));
-                // Render the views on top of the shelf.
-                rect.min.y = rect.max.y;
-                let end_index = self.shelf_index + if has_keyboard { 4 } else { 2 };
-                rect.max.y = self.child(end_index).rect().max.y;
-                rq.add(RenderData::expose(rect, UpdateMode::Partial));
-            } else {
-                for i in self.shelf_index - 1 ..= self.shelf_index + 1 {
-                    if i == self.shelf_index {
-                        continue;
-                    }
-                    rq.add(RenderData::new(self.child(i).id(), *self.child(i).rect(), UpdateMode::Partial));
-                }
-            }
-
-            // self.update_bottom_bar(rq);
+            self.open_search_bar(&context.keyboard_layouts, context.settings.keyboard_layout.clone(), hub, rq);
         }
     }
 
-    fn toggle_keyboard(&mut self, enable: bool, update: bool, id: Option<ViewId>, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
-        let dpi = CURRENT_DEVICE.dpi;
-        let (small_height, big_height) = (scale_by_dpi(SMALL_BAR_HEIGHT, dpi) as i32,
-                                          scale_by_dpi(BIG_BAR_HEIGHT, dpi) as i32);
-        let thickness = scale_by_dpi(THICKNESS_MEDIUM, dpi) as i32;
-        let (small_thickness, big_thickness) = halves(thickness);
+    fn toggle_keyboard(&mut self, enable: bool, update: bool, _id: Option<ViewId>, hub: &Hub, rq: &mut RenderQueue, context: &mut Context) {
         let has_search_bar = self.children[self.shelf_index+2].is::<SearchBar>();
 
         if let Some(index) = rlocate::<Keyboard>(self) {
             if enable {
                 return;
             }
-
-            let y_min = self.child(self.shelf_index+1).rect().min.y;
-            let mut rect = *self.child(index).rect();
-            rect.absorb(self.child(index-1).rect());
-
-            self.children.drain(index - 1 ..= index);
-
-            let delta_y = rect.height() as i32;
-
-            if has_search_bar {
-                for i in self.shelf_index+1..=self.shelf_index+2 {
-                    let shifted_rect = *self.child(i).rect() + pt!(0, delta_y);
-                    self.child_mut(i).resize(shifted_rect, hub, rq, context);
-                }
-            }
-
-            context.kb_rect = Rectangle::default();
-            hub.send(Event::Focus(None)).ok();
-            if update {
-                let rect = rect![self.rect.min.x, y_min,
-                                 self.rect.max.x, y_min + delta_y];
-                rq.add(RenderData::expose(rect, UpdateMode::Gui));
-            }
         } else {
             if !enable {
                 return;
-            }
-
-            // Technically this also adds the search bar in to children,
-            // but this is temporary until I can nuke these toggle functions
-            // so Iiiii thnk its fine actually
-            self.open_search_bar(&context.keyboard_layouts, context.settings.keyboard_layout.clone());
-        }
-
-        if update {
-            if enable {
-                if has_search_bar {
-                    for i in self.shelf_index+1..=self.shelf_index+4 {
-                        let update_mode = if (i - self.shelf_index) == 1 { UpdateMode::Partial } else { UpdateMode::Gui };
-                        rq.add(RenderData::new(self.child(i).id(), *self.child(i).rect(), update_mode));
-                    }
-                } else {
-                    for i in self.shelf_index+1..=self.shelf_index+2 {
-                        rq.add(RenderData::new(self.child(i).id(), *self.child(i).rect(), UpdateMode::Gui));
-                    }
-                }
-            } else if has_search_bar {
-                for i in self.shelf_index+1..=self.shelf_index+2 {
-                    rq.add(RenderData::new(self.child(i).id(), *self.child(i).rect(), UpdateMode::Gui));
-                }
             }
         }
     }
