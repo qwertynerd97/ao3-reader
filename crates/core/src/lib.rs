@@ -1,3 +1,4 @@
+#![feature(coverage_attribute)]
 #[macro_use] pub mod geom;
 
 mod unit;
