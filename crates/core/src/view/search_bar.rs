@@ -43,7 +43,11 @@ impl SearchBar {
         let side = search_bar.rect.height() as i32;
 
         // Search icon
-        // TODO - should send search query not just toggle the search
+        // TODO - There is probably a more logical way to handle this
+        // event. Currently, clicking the search icon triggers ToggleNear
+        // which he parent component has to handle.  Each parnt can implement
+        // unique and contradictory logic for this behavior, which usually also
+        // includes sending oof a search event
         let search_rect = rect![search_bar.rect.min, search_bar.rect.min + side];
         let search_icon = Icon::new("search",
                                     search_rect,
